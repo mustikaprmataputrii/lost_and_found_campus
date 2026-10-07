@@ -1,7 +1,9 @@
 part of '../main.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final Future<void> Function(String email, String nim, String nama)? onLogin;
+
+  const LoginScreen({super.key, this.onLogin});
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -28,8 +30,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim().toLowerCase();
     final nim = email.split('@').first;
     final nama = _namaController.text.trim();
-    await AppDataRepository().login(email: email, nim: nim, nama: nama);
-    await AuthService().saveLogin(email: email, nim: nim, nama: nama);
+    if (widget.onLogin != null) {
+      await widget.onLogin!(email, nim, nama);
+    } else {
+      await AppDataRepository().login(email: email, nim: nim, nama: nama);
+      await AuthService().saveLogin(email: email, nim: nim, nama: nama);
+    }
     if (!mounted) return;
     Navigator.pushReplacement(
         context,
