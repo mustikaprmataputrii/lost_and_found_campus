@@ -48,7 +48,7 @@ class ProfilScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                           color: UINColors.gold.withValues(alpha: .2),
                           borderRadius: BorderRadius.circular(30)),
-                      child: Text('NIM $nim â€¢ Terverifikasi UIN',
+                      child: Text('NIM $nim • Terverifikasi UIN',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,

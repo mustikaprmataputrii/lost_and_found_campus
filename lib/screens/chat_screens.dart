@@ -148,7 +148,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(widget.sesi.barang.nama, style: const TextStyle(fontSize: 16)),
             Row(children: [
-              Text('${widget.sesi.barang.pelapor} â€¢ ',
+              Text('${widget.sesi.barang.pelapor} • ',
                   style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.normal,

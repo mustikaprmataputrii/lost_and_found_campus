@@ -48,7 +48,7 @@ class DashboardScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
         children: [
-          const Text('Assalamuâ€™alaikum,',
+          const Text("Assalamu'alaikum,",
               style: TextStyle(
                   color: UINColors.muted,
                   fontSize: 14,

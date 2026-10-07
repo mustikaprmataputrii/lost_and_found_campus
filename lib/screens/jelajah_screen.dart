@@ -143,7 +143,7 @@ class _JelajahScreenState extends State<JelajahScreen> {
                                   item: item,
                                   onKlaim: () => widget.onKlaimTap(item))))))),
             const SizedBox(height: 8),
-            Text('Sesi ${widget.appStateStr} â€¢ ${widget.detikSesi} detik',
+            Text('Sesi ${widget.appStateStr} • ${widget.detikSesi} detik',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: UINColors.muted, fontSize: 10)),
           ],
@@ -164,7 +164,7 @@ class _JelajahScreenState extends State<JelajahScreen> {
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Assalamuâ€™alaikum,',
+          Text("Assalamu'alaikum,",
               style: TextStyle(
                   color: Colors.white.withValues(alpha: .72), fontSize: 13)),
           const SizedBox(height: 4),

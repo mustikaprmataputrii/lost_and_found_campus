@@ -138,7 +138,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                  Text('Pesan baru â€¢ ${sesi.barang.nama}',
+                  Text('Pesan baru • ${sesi.barang.nama}',
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                   Text(pesan.teks,
                       maxLines: 1,
