@@ -1,0 +1,31 @@
+name: lost_and_found_campus
+description: Aplikasi Lost and Found Digital Kampus dengan Implementasi Lifecycle & State.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  image_picker: ^1.1.2
+  hive_ce_flutter: ^2.4.0
+  http: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo_uin_transparent.png
+
+dependency_overrides:
+  # Versi plugin-based ini menghindari native-assets Objective-C yang bermasalah
+  # pada path Windows yang mengandung spasi, tetapi tetap mendukung iOS/macOS.
+  path_provider_foundation: 2.5.1
+
