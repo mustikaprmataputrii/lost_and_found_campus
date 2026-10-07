@@ -24,6 +24,10 @@ $env:TEMU_DB_PORT = '3306'
 $env:TEMU_DB_NAME = 'lost_and_found_campus'
 $env:TEMU_DB_USER = 'root'
 $env:TEMU_DB_PASSWORD = 'password_mysql'
+$env:TEMU_ADMIN_EMAIL = 'admin@uin-malang.ac.id'
+$env:TEMU_ADMIN_PASSWORD = 'ganti-password-admin'
+$env:TEMU_ADMIN_NAME = 'Administrator TEMU'
+$env:TEMU_ADMIN_SECRET = 'ganti-secret-token-admin'
 ```
 
 ## 3. Jalankan API lokal
@@ -49,7 +53,9 @@ GET /api/index.php?path=health
 ## Endpoint
 
 - `POST ?path=auth/login`
+- `POST ?path=auth/admin-login`
 - `GET ?path=sync&email=nim@student.uin-malang.ac.id`
+- `GET ?path=admin/sync` dengan header `X-Admin-Token`
 - `POST ?path=sync`
 
 Flutter mencoba backend terlebih dahulu dan menggunakan Hive sebagai cache/fallback apabila API belum tersedia.

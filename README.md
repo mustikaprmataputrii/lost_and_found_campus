@@ -8,6 +8,7 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 
 - Login hanya menggunakan email resmi mahasiswa dengan format:
   `NIM@student.uin-malang.ac.id`
+- Login admin terpisah dengan dashboard untuk melihat seluruh laporan, chat, dan notifikasi.
 - Dashboard ringkasan aplikasi.
 - Jelajah laporan barang hilang dan ditemukan.
 - Pencarian berdasarkan nama/deskripsi barang.
@@ -156,7 +157,9 @@ Endpoint yang tersedia:
 | Method | Endpoint | Keterangan |
 |---|---|---|
 | POST | `?path=auth/login` | Validasi email kampus dan menyimpan pengguna |
+| POST | `?path=auth/admin-login` | Verifikasi admin dan menghasilkan token sesi |
 | GET | `?path=sync&email=...` | Mengambil laporan, chat, dan notifikasi |
+| GET | `?path=admin/sync` | Mengambil seluruh data untuk dashboard admin dengan header token |
 | POST | `?path=sync` | Menyimpan sinkronisasi data aplikasi |
 
 Dokumentasi backend yang lebih spesifik tersedia di [backend/README.md](backend/README.md).
@@ -170,6 +173,18 @@ API default Web menggunakan:
 ```text
 http://127.0.0.1:8088/api/index.php
 ```
+
+### Login admin demo
+
+Pilih `Masuk sebagai admin` pada halaman login. Kredensial default backend:
+
+```text
+Email: admin@uin-malang.ac.id
+Password: admin123
+```
+
+Untuk instalasi nyata, ganti melalui environment `TEMU_ADMIN_EMAIL`,
+`TEMU_ADMIN_PASSWORD`, `TEMU_ADMIN_NAME`, dan `TEMU_ADMIN_SECRET`.
 
 Jalankan:
 
@@ -287,4 +302,3 @@ Project telah memenuhi fungsi utama MVP:
 ## Lisensi dan penggunaan
 
 Project ini dibuat untuk kebutuhan pembelajaran dan pengembangan aplikasi Lost & Found UIN Malang.
-

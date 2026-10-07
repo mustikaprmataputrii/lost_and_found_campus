@@ -71,4 +71,15 @@ class AppDataRepository {
       // Login lokal tetap dapat digunakan saat backend belum tersedia.
     }
   }
+
+  Future<AdminLoginResult> adminLogin({
+    required String email,
+    required String password,
+  }) {
+    return _remote.adminLogin(email: email, password: password);
+  }
+
+  Future<LocalDataSnapshot> loadAdmin({required String token}) {
+    return _remote.loadAdmin(token: token);
+  }
 }

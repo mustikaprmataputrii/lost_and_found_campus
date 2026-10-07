@@ -73,5 +73,33 @@ void main() {
       expect(find.text('Dashboard'), findsOneWidget);
       expect(find.text('Pusat aktivitas kampusmu'), findsOneWidget);
     });
+
+    testWidgets('mode login admin menampilkan kredensial khusus',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LoginScreen(
+            onAdminLogin: (_, __) async => const AdminLoginResult(
+              email: 'admin@uin-malang.ac.id',
+              nama: 'Administrator TEMU',
+              token: 'test-token',
+            ),
+          ),
+        ),
+      );
+
+      await tester.ensureVisible(find.text('Masuk sebagai admin'));
+      await tester.tap(find.text('Masuk sebagai admin'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Portal admin TEMU'), findsOneWidget);
+      expect(find.text('Email admin'), findsOneWidget);
+      expect(find.text('Password admin'), findsOneWidget);
+      await tester.tap(find.text('MASUK SEBAGAI ADMIN'));
+      await tester.pump();
+
+      expect(find.text('Email admin wajib diisi'), findsOneWidget);
+      expect(find.text('Password admin wajib diisi'), findsOneWidget);
+    });
   });
 }

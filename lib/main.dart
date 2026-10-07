@@ -27,6 +27,7 @@ part 'screens/detail_barang_screen.dart';
 part 'screens/lapor_barang_screen.dart';
 part 'screens/chat_screens.dart';
 part 'screens/profil_screen.dart';
+part 'screens/admin_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

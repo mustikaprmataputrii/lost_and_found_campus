@@ -63,6 +63,20 @@ class ApiService {
     return _decode(response);
   }
 
+  Future<AdminLoginResult> adminLogin({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('auth/admin-login'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 5));
+    return AdminLoginResult.fromMap(await _decode(response));
+  }
+
   Future<LocalDataSnapshot> load({required String email}) async {
     final response = await _client
         .get(_uri('sync', {'email': email}))
@@ -82,6 +96,32 @@ class ApiService {
             NotifikasiItem.fromMap(Map<dynamic, dynamic>.from(item as Map)))
         .toList();
 
+    return LocalDataSnapshot(
+      reports: reports,
+      chats: chats,
+      notifications: notifications,
+    );
+  }
+
+  Future<LocalDataSnapshot> loadAdmin({required String token}) async {
+    final response = await _client.get(
+      _uri('admin/sync'),
+      headers: {..._headers, 'X-Admin-Token': token},
+    ).timeout(const Duration(seconds: 5));
+    final decoded = await _decode(response);
+    final data = Map<String, dynamic>.from(decoded['data'] as Map);
+    final reports = (data['reports'] as List? ?? [])
+        .map((item) =>
+            BarangItem.fromMap(Map<dynamic, dynamic>.from(item as Map)))
+        .toList();
+    final chats = (data['chats'] as List? ?? [])
+        .map(
+            (item) => SesiChat.fromMap(Map<dynamic, dynamic>.from(item as Map)))
+        .toList();
+    final notifications = (data['notifications'] as List? ?? [])
+        .map((item) =>
+            NotifikasiItem.fromMap(Map<dynamic, dynamic>.from(item as Map)))
+        .toList();
     return LocalDataSnapshot(
       reports: reports,
       chats: chats,

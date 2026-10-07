@@ -164,3 +164,24 @@ class NotifikasiItem {
         isRead: raw['isRead'] == true,
       );
 }
+
+class AdminLoginResult {
+  final String email;
+  final String nama;
+  final String token;
+
+  const AdminLoginResult({
+    required this.email,
+    required this.nama,
+    required this.token,
+  });
+
+  factory AdminLoginResult.fromMap(Map<String, dynamic> raw) {
+    final data = Map<String, dynamic>.from(raw['data'] as Map);
+    return AdminLoginResult(
+      email: '${data['email'] ?? ''}',
+      nama: '${data['nama'] ?? 'Administrator'}',
+      token: '${data['token'] ?? ''}',
+    );
+  }
+}

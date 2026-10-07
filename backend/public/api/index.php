@@ -58,6 +58,28 @@ function requireString(array $body, string $key): string
     return trim((string) ($body[$key] ?? ''));
 }
 
+function createAdminToken(string $email, string $secret, int $expires): string
+{
+    $payload = $email . '|' . $expires;
+    return $expires . '.' . hash_hmac('sha256', $payload, $secret);
+}
+
+function adminTokenIsValid(string $token, string $email, string $secret): bool
+{
+    $parts = explode('.', $token, 2);
+    if (count($parts) !== 2 || !ctype_digit($parts[0])) {
+        return false;
+    }
+
+    $expires = (int) $parts[0];
+    if ($expires < time()) {
+        return false;
+    }
+
+    $expected = createAdminToken($email, $secret, $expires);
+    return hash_equals($expected, $token);
+}
+
 $dbConfig = $config['database'];
 $db = @new mysqli(
     $dbConfig['host'],
@@ -129,13 +151,48 @@ if ($method === 'POST' && $path === 'auth/login') {
     ]);
 }
 
-if ($path !== 'sync') {
+if ($method === 'POST' && $path === 'auth/admin-login') {
+    $email = strtolower(requireString($body, 'email'));
+    $password = requireString($body, 'password');
+    $admin = $config['admin'];
+
+    if (!hash_equals(strtolower($admin['email']), $email) ||
+        !hash_equals($admin['password'], $password)) {
+        respond(['ok' => false, 'error' => 'Email atau password admin salah.'], 401);
+    }
+
+    $expires = time() + 3600;
+    respond([
+        'ok' => true,
+        'data' => [
+            'email' => $admin['email'],
+            'nama' => $admin['name'],
+            'role' => 'admin',
+            'token' => createAdminToken($admin['email'], $admin['secret'], $expires),
+        ],
+    ]);
+}
+
+if ($path !== 'sync' && $path !== 'admin/sync') {
     respond(['ok' => false, 'error' => 'Endpoint tidak ditemukan.'], 404);
 }
 
-$email = strtolower(trim((string) ($body['email'] ?? $_GET['email'] ?? '')));
-if (!campusEmailIsValid($email)) {
-    respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+$isAdminRequest = $path === 'admin/sync';
+if ($isAdminRequest) {
+    if ($method !== 'GET') {
+        respond(['ok' => false, 'error' => 'Method tidak didukung.'], 405);
+    }
+    $admin = $config['admin'];
+    $adminToken = (string) ($_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '');
+    if (!adminTokenIsValid($adminToken, $admin['email'], $admin['secret'])) {
+        respond(['ok' => false, 'error' => 'Sesi admin tidak valid atau sudah kedaluwarsa.'], 401);
+    }
+    $email = strtolower($admin['email']);
+} else {
+    $email = strtolower(trim((string) ($body['email'] ?? $_GET['email'] ?? '')));
+    if (!campusEmailIsValid($email)) {
+        respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+    }
 }
 
 if ($method === 'GET') {
@@ -158,10 +215,11 @@ if ($method === 'GET') {
                 r.pelapor, r.kontak, r.tanggal, r.foto, r.status
          FROM chats c
          INNER JOIN reports r ON r.id = c.barang_id
-         WHERE c.owner_email = ? OR c.owner_email IS NULL
+         WHERE (? = ? OR c.owner_email = ? OR c.owner_email IS NULL)
          ORDER BY c.updated_at DESC',
     );
-    $chatStatement->bind_param('s', $email);
+    $adminEmail = strtolower($config['admin']['email']);
+    $chatStatement->bind_param('sss', $email, $adminEmail, $email);
     $chatStatement->execute();
     $chatRows = $chatStatement->get_result();
 
@@ -215,10 +273,10 @@ if ($method === 'GET') {
     $notificationStatement = $db->prepare(
         'SELECT title, message, waktu, is_read
          FROM notifications
-         WHERE email = ?
+         WHERE (? = ? OR email = ?)
          ORDER BY waktu DESC',
     );
-    $notificationStatement->bind_param('s', $email);
+    $notificationStatement->bind_param('sss', $email, $adminEmail, $email);
     $notificationStatement->execute();
     $notificationRows = $notificationStatement->get_result();
 
@@ -434,4 +492,3 @@ try {
         'error' => 'Data gagal disimpan ke database.',
     ], 500);
 }
-
