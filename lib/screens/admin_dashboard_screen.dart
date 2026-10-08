@@ -65,6 +65,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         builder: (_) => RoomChatScreen(
           sesi: sesi,
           currentUserName: widget.adminName,
+          currentUserEmail: widget.adminEmail,
           onStatusChanged: () {
             if (mounted) setState(() {});
           },

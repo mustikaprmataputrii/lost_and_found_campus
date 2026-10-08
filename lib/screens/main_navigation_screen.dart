@@ -21,6 +21,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   int _detikSesi = 0;
   String _appStateStr = 'resumed';
   Timer? _timer;
+  Timer? _syncTimer;
 
   final List<BarangItem> _daftarBarang = [];
   final List<SesiChat> _daftarSesiChat = [];
@@ -36,21 +37,70 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   Future<void> _siapkanDataAwal() async {
-    final snapshot = await AppDataRepository().load(email: widget.email);
-    if (!mounted) return;
-    setState(() {
-      _daftarBarang.addAll(snapshot.reports);
-      _daftarSesiChat.addAll(snapshot.chats);
-      _notifikasi.addAll(snapshot.notifications);
+    unawaited(AppDataRepository()
+        .updatePresence(email: widget.email, isOnline: true));
+    await _sinkronkanDariServer(showPopup: false);
+    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_sinkronkanDariServer());
     });
     await Future<void>.delayed(const Duration(milliseconds: 700));
     if (mounted && _daftarSesiChat.isNotEmpty) {
       final sesi = _daftarSesiChat.first;
-      if (sesi.pesanList.isNotEmpty) {
+      if (sesi.unreadCount > 0 && sesi.pesanList.isNotEmpty) {
         _tampilkanPopupPesan(sesi, sesi.pesanList.last);
       }
     }
   }
+
+  Future<void> _sinkronkanDariServer({bool showPopup = true}) async {
+    try {
+      final snapshot = await AppDataRepository().load(email: widget.email);
+      if (!mounted) return;
+
+      final oldChats = {
+        for (final sesi in _daftarSesiChat) sesi.id: sesi,
+      };
+      final incoming = <(SesiChat, PesanChat)>[];
+      for (final sesi in snapshot.chats) {
+        final previous = oldChats[sesi.id];
+        if (previous == null) continue;
+        final previousMessages =
+            previous.pesanList.map(_signaturePesan).toSet();
+        for (final pesan in sesi.pesanList) {
+          if (!pesan.isMe &&
+              !previousMessages.contains(_signaturePesan(pesan))) {
+            incoming.add((sesi, pesan));
+          }
+        }
+      }
+
+      setState(() {
+        _daftarBarang
+          ..clear()
+          ..addAll(snapshot.reports);
+        _daftarSesiChat
+          ..clear()
+          ..addAll(snapshot.chats);
+        _notifikasi
+          ..clear()
+          ..addAll(snapshot.notifications);
+      });
+
+      if (showPopup && incoming.isNotEmpty && mounted) {
+        final received = incoming.last;
+        final currentSession = _daftarSesiChat.firstWhere(
+          (item) => item.id == received.$1.id,
+          orElse: () => received.$1,
+        );
+        _tampilkanPopupPesan(currentSession, received.$2);
+      }
+    } catch (_) {
+      // Data yang sedang tampil dipertahankan jika server sementara offline.
+    }
+  }
+
+  String _signaturePesan(PesanChat pesan) =>
+      '${pesan.pengirimEmail}|${pesan.pengirim}|${pesan.teks}|${pesan.waktu.toIso8601String()}';
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -60,8 +110,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         state == AppLifecycleState.hidden) {
       _timer?.cancel();
       _simpanWaktuSesi();
+      unawaited(AppDataRepository()
+          .updatePresence(email: widget.email, isOnline: false));
     } else if (state == AppLifecycleState.resumed) {
       _mulaiTimer();
+      unawaited(AppDataRepository()
+          .updatePresence(email: widget.email, isOnline: true));
     }
   }
 
@@ -87,6 +141,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _syncTimer?.cancel();
     super.dispose();
   }
 
@@ -95,8 +150,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   int get _totalUnreadNotifikasi =>
       _notifikasi.where((item) => !item.isRead).length;
   void _tambahBarang(BarangItem item) {
+    item.pemilikEmail = widget.email;
     setState(() => _daftarBarang.insert(0, item));
     unawaited(_simpanData());
+  }
+
+  Future<void> _hapusBarang(BarangItem item) async {
+    await AppDataRepository()
+        .deleteReport(email: widget.email, reportId: item.id);
+    if (!mounted) return;
+    setState(() => _daftarBarang.removeWhere((report) => report.id == item.id));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Laporan berhasil dihapus.'),
+        behavior: SnackBarBehavior.floating));
   }
 
   Future<void> _simpanData() {
@@ -209,6 +275,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             builder: (_) => RoomChatScreen(
                 sesi: sesi,
                 currentUserName: widget.nama,
+                currentUserEmail: widget.email,
                 onStatusChanged: () {
                   setState(() {});
                   unawaited(_simpanData());
@@ -303,11 +370,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   void _logout() async {
+    await AppDataRepository()
+        .updatePresence(email: widget.email, isOnline: false);
     await AuthService().clear();
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
     }
+  }
+
+  void _kembaliDashboard() {
+    Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (_) => DashboardScreen(
+                nim: widget.nim, nama: widget.nama, email: widget.email)));
   }
 
   @override
@@ -318,6 +395,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           onKlaimTap: _bukaChatDariBarang,
           appStateStr: _appStateStr,
           detikSesi: _detikSesi,
+          currentUserEmail: widget.email,
+          onDelete: _hapusBarang,
+          onRefresh: () => _sinkronkanDariServer(showPopup: false),
           unreadNotificationCount: _totalUnreadNotifikasi,
           onNotificationsTap: _bukaNotifikasi),
       LaporBarangScreen(
@@ -332,6 +412,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     ];
     return Scaffold(
         body: IndexedStack(index: _currentIndex, children: screens),
+        floatingActionButton: FloatingActionButton.small(
+            onPressed: _kembaliDashboard,
+            tooltip: 'Kembali ke Dashboard',
+            backgroundColor: UINColors.gold,
+            foregroundColor: UINColors.deep,
+            child: const Icon(Icons.home_rounded)),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         bottomNavigationBar: NavigationBar(
             height: 74,
             selectedIndex: _currentIndex,

@@ -81,11 +81,13 @@ class DaftarChatScreen extends StatelessWidget {
 class RoomChatScreen extends StatefulWidget {
   final SesiChat sesi;
   final String currentUserName;
+  final String currentUserEmail;
   final VoidCallback onStatusChanged;
   const RoomChatScreen(
       {super.key,
       required this.sesi,
       required this.currentUserName,
+      required this.currentUserEmail,
       required this.onStatusChanged});
   @override
   State<RoomChatScreen> createState() => _RoomChatScreenState();
@@ -106,6 +108,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     if (text.isEmpty) return;
     setState(() => widget.sesi.pesanList.add(PesanChat(
         pengirim: widget.currentUserName,
+        pengirimEmail: widget.currentUserEmail,
         teks: text,
         waktu: DateTime.now(),
         isMe: true)));

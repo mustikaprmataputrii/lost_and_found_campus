@@ -5,6 +5,9 @@ class JelajahScreen extends StatefulWidget {
   final void Function(BarangItem) onKlaimTap;
   final String appStateStr;
   final int detikSesi;
+  final String currentUserEmail;
+  final Future<void> Function(BarangItem item)? onDelete;
+  final Future<void> Function()? onRefresh;
   final int unreadNotificationCount;
   final VoidCallback onNotificationsTap;
   const JelajahScreen(
@@ -13,6 +16,9 @@ class JelajahScreen extends StatefulWidget {
       required this.onKlaimTap,
       required this.appStateStr,
       required this.detikSesi,
+      required this.currentUserEmail,
+      this.onDelete,
+      this.onRefresh,
       required this.unreadNotificationCount,
       required this.onNotificationsTap});
   @override
@@ -61,7 +67,7 @@ class _JelajahScreenState extends State<JelajahScreen> {
           ]),
       body: RefreshIndicator(
         color: UINColors.primary,
-        onRefresh: () async => setState(() {}),
+        onRefresh: widget.onRefresh ?? () async => setState(() {}),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
           children: [
@@ -141,6 +147,10 @@ class _JelajahScreenState extends State<JelajahScreen> {
                           MaterialPageRoute(
                               builder: (_) => DetailBarangScreen(
                                   item: item,
+                                  currentUserEmail: widget.currentUserEmail,
+                                  onDelete: widget.onDelete == null
+                                      ? null
+                                      : () => widget.onDelete!(item),
                                   onKlaim: () => widget.onKlaimTap(item))))))),
             const SizedBox(height: 8),
             Text('Sesi ${widget.appStateStr} • ${widget.detikSesi} detik',

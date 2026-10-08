@@ -229,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                         _mode == _LoginMode.admin
                                             ? 'MASUK SEBAGAI ADMIN'
                                             : 'MASUK KE TEMU',
-                                         style: const TextStyle(
+                                        style: const TextStyle(
                                             fontWeight: FontWeight.w800,
                                             letterSpacing: .5)))),
                       ]),

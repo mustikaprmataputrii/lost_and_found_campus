@@ -153,6 +153,7 @@ void main() {
           home: RoomChatScreen(
             sesi: sesi,
             currentUserName: 'Saya',
+            currentUserEmail: '23123456@student.uin-malang.ac.id',
             onStatusChanged: () => changed = true,
           ),
         ),

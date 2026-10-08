@@ -3,13 +3,50 @@ part of '../main.dart';
 class DetailBarangScreen extends StatelessWidget {
   final BarangItem item;
   final VoidCallback onKlaim;
+  final String? currentUserEmail;
+  final Future<void> Function()? onDelete;
   const DetailBarangScreen(
-      {super.key, required this.item, required this.onKlaim});
+      {super.key,
+      required this.item,
+      required this.onKlaim,
+      this.currentUserEmail,
+      this.onDelete});
+
+  Future<void> _konfirmasiHapus(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Hapus laporan?'),
+        content: const Text(
+            'Laporan ini akan dihapus dari database dan tidak terlihat oleh akun lain.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(backgroundColor: UINColors.coral),
+              child: const Text('Hapus'))
+        ],
+      ),
+    );
+    if (confirmed != true || onDelete == null) return;
+    await onDelete!();
+    if (context.mounted) Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final found = item.jenis == JenisLaporan.ditemukan;
     return Scaffold(
-        appBar: AppBar(title: const Text('Detail laporan')),
+        appBar: AppBar(title: const Text('Detail laporan'), actions: [
+          if (onDelete != null && item.pemilikEmail == currentUserEmail)
+            IconButton(
+                onPressed: () => _konfirmasiHapus(context),
+                tooltip: 'Hapus laporan',
+                icon: const Icon(Icons.delete_outline, color: UINColors.coral)),
+          const SizedBox(width: 8)
+        ]),
         body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [

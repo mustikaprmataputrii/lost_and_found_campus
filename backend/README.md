@@ -6,6 +6,9 @@ Backend REST API sederhana untuk demo akademik menggunakan PHP + MySQL/MariaDB L
 
 Import file `database/schema.sql` melalui phpMyAdmin Laragon atau MySQL CLI.
 
+Untuk database yang sudah pernah dibuat sebelum fitur multi-akun, jalankan juga
+`database/migrations/001_multi_user_interaction.sql` satu kali.
+
 Contoh CLI PowerShell:
 
 ```powershell
@@ -54,8 +57,12 @@ GET /api/index.php?path=health
 
 - `POST ?path=auth/login`
 - `POST ?path=auth/admin-login`
+- `POST ?path=presence`
 - `GET ?path=sync&email=nim@student.uin-malang.ac.id`
 - `GET ?path=admin/sync` dengan header `X-Admin-Token`
 - `POST ?path=sync`
+- `DELETE ?path=reports&email=...&id=...` hanya untuk pemilik laporan
 
-Flutter mencoba backend terlebih dahulu dan menggunakan Hive sebagai cache/fallback apabila API belum tersedia.
+Backend menjadi sumber data bersama untuk semua akun. Hive di Flutter hanya
+menjadi buffer lokal dan tidak dipakai untuk mencampurkan data antar akun saat
+API tidak tersedia.

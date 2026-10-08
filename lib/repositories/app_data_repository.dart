@@ -7,22 +7,6 @@ class AppDataRepository {
   Future<LocalDataSnapshot> load({required String email}) async {
     try {
       final remoteData = await _remote.load(email: email);
-      final hasRemoteData = remoteData.reports.isNotEmpty ||
-          remoteData.chats.isNotEmpty ||
-          remoteData.notifications.isNotEmpty;
-
-      if (!hasRemoteData) {
-        final localData = await _local.load();
-        await _remote.saveAll(
-          email: email,
-          nama: email.split('@').first,
-          reports: localData.reports,
-          chats: localData.chats,
-          notifications: localData.notifications,
-        );
-        return localData;
-      }
-
       await _local.saveAll(
         reports: remoteData.reports,
         chats: remoteData.chats,
@@ -30,7 +14,9 @@ class AppDataRepository {
       );
       return remoteData;
     } catch (_) {
-      return _local.load();
+      // Server adalah sumber data bersama. Jangan mengembalikan cache akun
+      // sebelumnya ketika API sedang offline.
+      rethrow;
     }
   }
 
@@ -65,11 +51,25 @@ class AppDataRepository {
     required String nim,
     required String nama,
   }) async {
+    await _remote.login(email: email, nim: nim, nama: nama);
+  }
+
+  Future<void> updatePresence({
+    required String email,
+    required bool isOnline,
+  }) async {
     try {
-      await _remote.login(email: email, nim: nim, nama: nama);
+      await _remote.updatePresence(email: email, isOnline: isOnline);
     } catch (_) {
-      // Login lokal tetap dapat digunakan saat backend belum tersedia.
+      // Presence tidak menghalangi penggunaan lokal saat API sementara offline.
     }
+  }
+
+  Future<void> deleteReport({
+    required String email,
+    required String reportId,
+  }) {
+    return _remote.deleteReport(email: email, reportId: reportId);
   }
 
   Future<AdminLoginResult> adminLogin({

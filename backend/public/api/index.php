@@ -7,7 +7,7 @@ $config = require __DIR__ . '/../../config.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: ' . $config['cors_origin']);
 header('Access-Control-Allow-Headers: Content-Type, Accept');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -102,13 +102,40 @@ $method = $_SERVER['REQUEST_METHOD'];
 $path = trim((string) ($_GET['path'] ?? ''), '/');
 $body = requestBody();
 
-function ensureUser(mysqli $db, string $email, string $nim, string $nama): void
+function ensureUser(mysqli $db, string $email, string $nim, string $nama): ?string
 {
+    $existing = $db->prepare('SELECT nim, nama FROM users WHERE email = ? LIMIT 1');
+    $existing->bind_param('s', $email);
+    $existing->execute();
+    $row = $existing->get_result()->fetch_assoc();
+    $existing->close();
+
+    if ($row !== null) {
+        if ((string) $row['nim'] !== $nim || (string) $row['nama'] !== $nama) {
+            return 'Email ini sudah terdaftar dengan nama dan NIM yang berbeda.';
+        }
+        return null;
+    }
+
     $statement = $db->prepare(
-        'INSERT INTO users (nim, email, nama) VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE nim = VALUES(nim), nama = VALUES(nama)',
+        'INSERT INTO users (nim, email, nama) VALUES (?, ?, ?)',
     );
     $statement->bind_param('sss', $nim, $email, $nama);
+    $statement->execute();
+    $statement->close();
+    return null;
+}
+
+function setPresence(mysqli $db, string $email, bool $isOnline): void
+{
+    $lastSeen = date('Y-m-d H:i:s');
+    $statement = $db->prepare(
+        'INSERT INTO user_presence (email, is_online, last_seen)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE is_online = VALUES(is_online), last_seen = VALUES(last_seen)',
+    );
+    $online = $isOnline ? 1 : 0;
+    $statement->bind_param('sis', $email, $online, $lastSeen);
     $statement->execute();
     $statement->close();
 }
@@ -140,7 +167,11 @@ if ($method === 'POST' && $path === 'auth/login') {
         $nama = $nim;
     }
 
-    ensureUser($db, $email, $nim, $nama);
+    $identityError = ensureUser($db, $email, $nim, $nama);
+    if ($identityError !== null) {
+        respond(['ok' => false, 'error' => $identityError], 409);
+    }
+    setPresence($db, $email, true);
     respond([
         'ok' => true,
         'data' => [
@@ -149,6 +180,16 @@ if ($method === 'POST' && $path === 'auth/login') {
             'nama' => $nama,
         ],
     ]);
+}
+
+if ($method === 'POST' && $path === 'presence') {
+    $email = strtolower(requireString($body, 'email'));
+    $isOnline = !empty($body['isOnline']);
+    if (!campusEmailIsValid($email)) {
+        respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+    }
+    setPresence($db, $email, $isOnline);
+    respond(['ok' => true, 'data' => ['updated' => true]]);
 }
 
 if ($method === 'POST' && $path === 'auth/admin-login') {
@@ -171,6 +212,46 @@ if ($method === 'POST' && $path === 'auth/admin-login') {
             'token' => createAdminToken($admin['email'], $admin['secret'], $expires),
         ],
     ]);
+}
+
+if ($method === 'DELETE' && $path === 'reports') {
+    $email = strtolower(trim((string) ($_GET['email'] ?? '')));
+    $reportId = trim((string) ($_GET['id'] ?? ''));
+
+    if (!campusEmailIsValid($email)) {
+        respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+    }
+    if ($reportId === '') {
+        respond(['ok' => false, 'error' => 'ID laporan wajib diisi.'], 422);
+    }
+
+    $ownerStatement = $db->prepare(
+        'SELECT user_email FROM reports WHERE id = ? LIMIT 1',
+    );
+    $ownerStatement->bind_param('s', $reportId);
+    $ownerStatement->execute();
+    $owner = $ownerStatement->get_result()->fetch_assoc();
+    $ownerStatement->close();
+
+    if ($owner === null) {
+        respond(['ok' => false, 'error' => 'Laporan tidak ditemukan.'], 404);
+    }
+    if (strtolower((string) $owner['user_email']) !== $email) {
+        respond(['ok' => false, 'error' => 'Anda hanya dapat menghapus laporan milik sendiri.'], 403);
+    }
+
+    $deleteStatement = $db->prepare(
+        'DELETE FROM reports WHERE id = ? AND user_email = ?',
+    );
+    $deleteStatement->bind_param('ss', $reportId, $email);
+    $deleteStatement->execute();
+    $deleted = $deleteStatement->affected_rows > 0;
+    $deleteStatement->close();
+
+    respond([
+        'ok' => $deleted,
+        'data' => ['deleted' => $deleted],
+    ], $deleted ? 200 : 404);
 }
 
 if ($path !== 'sync' && $path !== 'admin/sync') {
@@ -199,32 +280,53 @@ if ($method === 'GET') {
     $reports = [];
     $reportResult = $db->query(
         'SELECT id, nama, lokasi, deskripsi, jenis, pelapor, kontak,
-                tanggal, foto, status
+                tanggal, foto, status, user_email
          FROM reports
          ORDER BY tanggal DESC',
     );
     while ($row = $reportResult->fetch_assoc()) {
         $row['tanggal'] = isoDate($row['tanggal']);
+        $row['ownerEmail'] = strtolower((string) $row['user_email']);
+        unset($row['user_email']);
         $reports[] = $row;
     }
 
     $chats = [];
-    $chatStatement = $db->prepare(
-        'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
-                r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
-                r.pelapor, r.kontak, r.tanggal, r.foto, r.status
-         FROM chats c
-         INNER JOIN reports r ON r.id = c.barang_id
-         WHERE (? = ? OR c.owner_email = ? OR c.owner_email IS NULL)
-         ORDER BY c.updated_at DESC',
-    );
     $adminEmail = strtolower($config['admin']['email']);
-    $chatStatement->bind_param('sss', $email, $adminEmail, $email);
+    $chatQuery = $isAdminRequest
+        ? 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
+                  p.is_online AS peer_online, p.last_seen AS peer_last_seen,
+                  r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
+                  r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
+                  r.user_email AS report_owner_email
+           FROM chats c
+           INNER JOIN reports r ON r.id = c.barang_id
+           LEFT JOIN user_presence p ON p.email = c.owner_email
+           ORDER BY c.updated_at DESC'
+        : 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
+                  peer_presence.is_online AS peer_online,
+                  peer_presence.last_seen AS peer_last_seen,
+                  r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
+                  r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
+                  r.user_email AS report_owner_email
+           FROM chats c
+           INNER JOIN reports r ON r.id = c.barang_id
+           INNER JOIN chat_members member
+             ON member.chat_id = c.id AND member.email = ?
+           LEFT JOIN chat_members peer
+             ON peer.chat_id = c.id AND peer.email <> member.email
+           LEFT JOIN user_presence peer_presence
+             ON peer_presence.email = peer.email
+           ORDER BY c.updated_at DESC';
+    $chatStatement = $db->prepare($chatQuery);
+    if (!$isAdminRequest) {
+        $chatStatement->bind_param('s', $email);
+    }
     $chatStatement->execute();
     $chatRows = $chatStatement->get_result();
 
     $messageStatement = $db->prepare(
-        'SELECT pengirim, teks, waktu, is_me
+        'SELECT pengirim, pengirim_email, teks, waktu, is_me
          FROM messages
          WHERE chat_id = ?
          ORDER BY waktu ASC, id ASC',
@@ -237,11 +339,15 @@ if ($method === 'GET') {
         $messages = [];
 
         while ($message = $messageRows->fetch_assoc()) {
+            $senderEmail = strtolower((string) ($message['pengirim_email'] ?? ''));
             $messages[] = [
                 'pengirim' => $message['pengirim'],
                 'teks' => $message['teks'],
                 'waktu' => isoDate($message['waktu']),
-                'isMe' => (bool) $message['is_me'],
+                'pengirimEmail' => $senderEmail,
+                'isMe' => $senderEmail !== ''
+                    ? $senderEmail === $email
+                    : (bool) $message['is_me'],
             ];
         }
 
@@ -258,10 +364,11 @@ if ($method === 'GET') {
                 'tanggal' => isoDate($row['tanggal']),
                 'foto' => $row['foto'],
                 'status' => $row['status'],
+                'ownerEmail' => strtolower((string) ($row['report_owner_email'] ?? '')),
             ],
             'pesanList' => $messages,
-            'isOnline' => (bool) $row['is_online'],
-            'lastSeen' => isoDate($row['last_seen']),
+            'isOnline' => (bool) ($row['peer_online'] ?? $row['is_online']),
+            'lastSeen' => isoDate($row['peer_last_seen'] ?? $row['last_seen']),
             'unreadCount' => (int) $row['unread_count'],
         ];
     }
@@ -306,7 +413,11 @@ if ($method !== 'POST') {
 
 $nim = explode('@', $email)[0];
 $nama = trim((string) ($body['nama'] ?? $nim));
-ensureUser($db, $email, $nim, $nama);
+$identityError = ensureUser($db, $email, $nim, $nama);
+if ($identityError !== null) {
+    respond(['ok' => false, 'error' => $identityError], 409);
+}
+setPresence($db, $email, true);
 
 $reports = is_array($body['reports'] ?? null) ? $body['reports'] : [];
 $chats = is_array($body['chats'] ?? null) ? $body['chats'] : [];
@@ -327,7 +438,7 @@ try {
            deskripsi = VALUES(deskripsi), jenis = VALUES(jenis),
            pelapor = VALUES(pelapor), kontak = VALUES(kontak),
            tanggal = VALUES(tanggal), foto = VALUES(foto),
-           status = VALUES(status), user_email = VALUES(user_email)',
+           status = VALUES(status)',
     );
 
     foreach ($reports as $report) {
@@ -383,8 +494,25 @@ try {
         'DELETE FROM messages WHERE chat_id = ?',
     );
     $messageStatement = $db->prepare(
-        'INSERT INTO messages (chat_id, pengirim, teks, waktu, is_me)
-         VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO messages
+          (chat_id, pengirim, pengirim_email, teks, waktu, is_me)
+         VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    $memberStatement = $db->prepare(
+        'INSERT IGNORE INTO chat_members (chat_id, email) VALUES (?, ?)',
+    );
+    $reportOwnerStatement = $db->prepare(
+        'SELECT user_email FROM reports WHERE id = ? LIMIT 1',
+    );
+    $peerStatement = $db->prepare(
+        'SELECT email FROM chat_members WHERE chat_id = ? AND email <> ?',
+    );
+    $messageNotificationStatement = $db->prepare(
+        'INSERT INTO notifications
+          (notification_key, email, title, message, waktu, is_read)
+         VALUES (?, ?, ?, ?, ?, 0)
+         ON DUPLICATE KEY UPDATE
+           title = VALUES(title), message = VALUES(message), waktu = VALUES(waktu)',
     );
 
     foreach ($chats as $chat) {
@@ -402,17 +530,31 @@ try {
         $online = !empty($chat['isOnline']) ? 1 : 0;
         $lastSeen = isset($chat['lastSeen']) ? databaseDate($chat['lastSeen']) : null;
         $unread = (int) ($chat['unreadCount'] ?? 0);
+        $reportOwnerEmail = $email;
+        $reportOwnerStatement->bind_param('s', $barangId);
+        $reportOwnerStatement->execute();
+        $reportOwnerRow = $reportOwnerStatement->get_result()->fetch_assoc();
+        if (!empty($reportOwnerRow['user_email'])) {
+            $reportOwnerEmail = strtolower((string) $reportOwnerRow['user_email']);
+        }
 
         $chatStatement->bind_param(
             'sssisi',
             $chatId,
             $barangId,
-            $email,
+            $reportOwnerEmail,
             $online,
             $lastSeen,
             $unread,
         );
         $chatStatement->execute();
+
+        $memberStatement->bind_param('ss', $chatId, $email);
+        $memberStatement->execute();
+        if ($reportOwnerEmail !== '') {
+            $memberStatement->bind_param('ss', $chatId, $reportOwnerEmail);
+            $memberStatement->execute();
+        }
 
         $deleteMessageStatement->bind_param('s', $chatId);
         $deleteMessageStatement->execute();
@@ -426,25 +568,56 @@ try {
             }
 
             $sender = (string) ($message['pengirim'] ?? '');
+            $senderEmail = strtolower((string) ($message['pengirimEmail'] ?? ''));
+            if ($senderEmail === '') {
+                $senderEmail = !empty($message['isMe']) ? $email : $reportOwnerEmail;
+            }
             $text = (string) ($message['teks'] ?? '');
             $time = databaseDate($message['waktu'] ?? null);
             $isMe = !empty($message['isMe']) ? 1 : 0;
 
             $messageStatement->bind_param(
-                'ssssi',
+                'sssssi',
                 $chatId,
                 $sender,
+                $senderEmail,
                 $text,
                 $time,
                 $isMe,
             );
             $messageStatement->execute();
+
+            $peerStatement->bind_param('ss', $chatId, $senderEmail);
+            $peerStatement->execute();
+            $peerRows = $peerStatement->get_result();
+            while ($peer = $peerRows->fetch_assoc()) {
+                $peerEmail = strtolower((string) $peer['email']);
+                $notificationKey = hash(
+                    'sha256',
+                    implode('|', [$chatId, $senderEmail, $text, $time, $peerEmail]),
+                );
+                $notificationTitle = 'Pesan baru';
+                $notificationMessage = $sender . ': ' . $text;
+                $messageNotificationStatement->bind_param(
+                    'sssss',
+                    $notificationKey,
+                    $peerEmail,
+                    $notificationTitle,
+                    $notificationMessage,
+                    $time,
+                );
+                $messageNotificationStatement->execute();
+            }
         }
     }
 
     $chatStatement->close();
     $deleteMessageStatement->close();
     $messageStatement->close();
+    $memberStatement->close();
+    $reportOwnerStatement->close();
+    $peerStatement->close();
+    $messageNotificationStatement->close();
 
     $notificationStatement = $db->prepare(
         'INSERT INTO notifications

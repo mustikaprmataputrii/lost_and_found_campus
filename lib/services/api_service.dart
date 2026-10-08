@@ -77,6 +77,30 @@ class ApiService {
     return AdminLoginResult.fromMap(await _decode(response));
   }
 
+  Future<void> updatePresence({
+    required String email,
+    required bool isOnline,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('presence'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'isOnline': isOnline}),
+        )
+        .timeout(const Duration(seconds: 5));
+    await _decode(response);
+  }
+
+  Future<void> deleteReport({
+    required String email,
+    required String reportId,
+  }) async {
+    final response = await _client
+        .delete(_uri('reports', {'email': email, 'id': reportId}))
+        .timeout(const Duration(seconds: 5));
+    await _decode(response);
+  }
+
   Future<LocalDataSnapshot> load({required String email}) async {
     final response = await _client
         .get(_uri('sync', {'email': email}))

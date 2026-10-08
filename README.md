@@ -8,6 +8,8 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 
 - Login hanya menggunakan email resmi mahasiswa dengan format:
   `NIM@student.uin-malang.ac.id`
+- Satu email dikunci ke satu NIM dan satu nama yang sudah terdaftar.
+- Laporan, chat, dan notifikasi tersinkron lintas akun melalui backend bersama.
 - Login admin terpisah dengan dashboard untuk melihat seluruh laporan, chat, dan notifikasi.
 - Dashboard ringkasan aplikasi.
 - Jelajah laporan barang hilang dan ditemukan.
@@ -23,7 +25,8 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 - Profil pengguna dan penghitung waktu sesi aplikasi.
 - Logo dan nuansa visual UIN Malang.
 - Penyimpanan utama menggunakan MySQL/MariaDB melalui REST API.
-- Cache/fallback lokal menggunakan Hive agar aplikasi tetap dapat dibuka saat API offline.
+- Cache lokal menggunakan Hive sebagai buffer penulisan perangkat, sedangkan server menjadi sumber data bersama.
+- Sinkronisasi berkala memperbarui laporan, chat, notifikasi, dan status kehadiran pengguna.
 - Dukungan target Flutter Web, Android, iOS, Windows, macOS, dan Linux sesuai ketersediaan toolchain perangkat.
 
 ## Arsitektur aplikasi
@@ -44,7 +47,7 @@ Flutter UI
                  +-- Hive cache/fallback
 ```
 
-Aplikasi mencoba mengambil data dari backend terlebih dahulu. Jika API tidak dapat diakses, aplikasi menggunakan cache Hive yang tersimpan di perangkat. Perubahan laporan, chat, pesan, status klaim, dan notifikasi disimpan ke cache lalu dikirim ke backend ketika API tersedia.
+Aplikasi mengambil data bersama dari backend MySQL melalui REST API. Cache Hive dipakai sebagai buffer penulisan perangkat, tetapi tidak digunakan untuk menampilkan data akun lain ketika backend gagal diakses. Dengan demikian, cache akun sebelumnya tidak terbawa ke akun yang baru login.
 
 ## Struktur folder penting
 
@@ -114,6 +117,8 @@ Tabel yang digunakan:
 - `reports`: data laporan barang dan foto.
 - `chats`: sesi percakapan klaim.
 - `messages`: pesan dalam sesi chat.
+- `chat_members`: anggota setiap sesi chat.
+- `user_presence`: status online dan waktu terakhir dilihat.
 - `notifications`: notifikasi pengguna.
 
 ## Konfigurasi koneksi backend
@@ -158,9 +163,11 @@ Endpoint yang tersedia:
 |---|---|---|
 | POST | `?path=auth/login` | Validasi email kampus dan menyimpan pengguna |
 | POST | `?path=auth/admin-login` | Verifikasi admin dan menghasilkan token sesi |
+| POST | `?path=presence` | Memperbarui status online atau last seen |
 | GET | `?path=sync&email=...` | Mengambil laporan, chat, dan notifikasi |
 | GET | `?path=admin/sync` | Mengambil seluruh data untuk dashboard admin dengan header token |
 | POST | `?path=sync` | Menyimpan sinkronisasi data aplikasi |
+| DELETE | `?path=reports&email=...&id=...` | Menghapus laporan hanya oleh pemiliknya |
 
 Dokumentasi backend yang lebih spesifik tersedia di [backend/README.md](backend/README.md).
 
@@ -289,7 +296,9 @@ Project telah memenuhi fungsi utama MVP:
 - Validasi input email kampus dan form laporan telah diterapkan.
 - Data laporan, chat, pesan, dan notifikasi dikelola melalui repository.
 - Backend REST API dan database MySQL telah tersedia.
-- Penyimpanan lokal Hive tersedia sebagai cache/fallback.
+- Penyimpanan lokal Hive tersedia sebagai buffer perangkat tanpa mencampurkan data antar akun.
+- Identitas email, NIM, dan nama dikunci di database; perubahan identitas pada email yang sama ditolak.
+- Laporan milik akun lain, anggota chat, notifikasi pesan, dan presence dibaca dari database bersama.
 - Build Web dan test Flutter telah divalidasi.
 
 ## Batasan saat ini

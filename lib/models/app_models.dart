@@ -14,6 +14,7 @@ class BarangItem {
   final String kontak;
   final DateTime tanggal;
   final Uint8List? fotoBytes;
+  String? pemilikEmail;
   StatusBarang status;
 
   BarangItem({
@@ -26,6 +27,7 @@ class BarangItem {
     required this.kontak,
     required this.tanggal,
     this.fotoBytes,
+    this.pemilikEmail,
     this.status = StatusBarang.belumDiklaim,
   });
 
@@ -39,6 +41,7 @@ class BarangItem {
         'kontak': kontak,
         'tanggal': tanggal.toIso8601String(),
         'foto': fotoBytes == null ? null : base64Encode(fotoBytes!),
+        'ownerEmail': pemilikEmail,
         'status': status.name,
       };
 
@@ -57,6 +60,7 @@ class BarangItem {
       kontak: '${raw['kontak'] ?? ''}',
       tanggal: DateTime.tryParse('${raw['tanggal']}') ?? DateTime.now(),
       fotoBytes: foto is String && foto.isNotEmpty ? base64Decode(foto) : null,
+      pemilikEmail: raw['ownerEmail'] == null ? null : '${raw['ownerEmail']}',
       status: StatusBarang.values.firstWhere(
         (item) => item.name == raw['status'],
         orElse: () => StatusBarang.belumDiklaim,
@@ -67,18 +71,21 @@ class BarangItem {
 
 class PesanChat {
   final String pengirim;
+  final String? pengirimEmail;
   final String teks;
   final DateTime waktu;
   final bool isMe;
 
   PesanChat(
       {required this.pengirim,
+      this.pengirimEmail,
       required this.teks,
       required this.waktu,
       required this.isMe});
 
   Map<String, dynamic> toMap() => {
         'pengirim': pengirim,
+        'pengirimEmail': pengirimEmail,
         'teks': teks,
         'waktu': waktu.toIso8601String(),
         'isMe': isMe,
@@ -86,6 +93,8 @@ class PesanChat {
 
   static PesanChat fromMap(Map<dynamic, dynamic> raw) => PesanChat(
         pengirim: '${raw['pengirim'] ?? ''}',
+        pengirimEmail:
+            raw['pengirimEmail'] == null ? null : '${raw['pengirimEmail']}',
         teks: '${raw['teks'] ?? ''}',
         waktu: DateTime.tryParse('${raw['waktu']}') ?? DateTime.now(),
         isMe: raw['isMe'] == true,
