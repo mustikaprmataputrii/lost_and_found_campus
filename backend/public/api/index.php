@@ -128,14 +128,13 @@ function ensureUser(mysqli $db, string $email, string $nim, string $nama): ?stri
 
 function setPresence(mysqli $db, string $email, bool $isOnline): void
 {
-    $lastSeen = date('Y-m-d H:i:s');
     $statement = $db->prepare(
         'INSERT INTO user_presence (email, is_online, last_seen)
-         VALUES (?, ?, ?)
+         VALUES (?, ?, UTC_TIMESTAMP())
          ON DUPLICATE KEY UPDATE is_online = VALUES(is_online), last_seen = VALUES(last_seen)',
     );
     $online = $isOnline ? 1 : 0;
-    $statement->bind_param('sis', $email, $online, $lastSeen);
+    $statement->bind_param('si', $email, $online);
     $statement->execute();
     $statement->close();
 }
@@ -190,6 +189,203 @@ if ($method === 'POST' && $path === 'presence') {
     }
     setPresence($db, $email, $isOnline);
     respond(['ok' => true, 'data' => ['updated' => true]]);
+}
+
+if ($method === 'POST' && $path === 'chats/start') {
+    $email = strtolower(requireString($body, 'email'));
+    $reportId = trim(requireString($body, 'reportId'));
+    if (!campusEmailIsValid($email) || $reportId === '') {
+        respond(['ok' => false, 'error' => 'Email atau laporan tidak valid.'], 422);
+    }
+
+    try {
+        $db->begin_transaction();
+        $reportStatement = $db->prepare(
+            'SELECT user_email FROM reports WHERE id = ? LIMIT 1 FOR UPDATE',
+        );
+        $reportStatement->bind_param('s', $reportId);
+        $reportStatement->execute();
+        $report = $reportStatement->get_result()->fetch_assoc();
+        $reportStatement->close();
+        if ($report === null || empty($report['user_email'])) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Laporan tidak ditemukan atau belum memiliki pemilik.'], 404);
+        }
+        $ownerEmail = strtolower((string) $report['user_email']);
+        if ($ownerEmail === $email) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Anda tidak dapat memulai chat dengan akun sendiri.'], 422);
+        }
+
+        $chatLookup = $db->prepare(
+            'SELECT c.id
+             FROM chats c
+             INNER JOIN chat_members cm ON cm.chat_id = c.id AND cm.email = ?
+             WHERE c.barang_id = ?
+             ORDER BY c.updated_at DESC LIMIT 1',
+        );
+        $chatLookup->bind_param('ss', $email, $reportId);
+        $chatLookup->execute();
+        $chatRow = $chatLookup->get_result()->fetch_assoc();
+        $chatLookup->close();
+
+        if ($chatRow === null) {
+            $chatId = 'chat_' . bin2hex(random_bytes(16));
+            $createChat = $db->prepare(
+                'INSERT INTO chats (id, barang_id, owner_email) VALUES (?, ?, ?)',
+            );
+            $createChat->bind_param('sss', $chatId, $reportId, $ownerEmail);
+            $createChat->execute();
+            $createChat->close();
+        } else {
+            $chatId = (string) $chatRow['id'];
+        }
+
+        $memberStatement = $db->prepare(
+            'INSERT IGNORE INTO chat_members (chat_id, email, last_read_at)
+             VALUES (?, ?, UTC_TIMESTAMP(6))',
+        );
+        $memberStatement->bind_param('ss', $chatId, $ownerEmail);
+        $memberStatement->execute();
+        $memberStatement->bind_param('ss', $chatId, $email);
+        $memberStatement->execute();
+        $memberStatement->close();
+        $db->commit();
+
+        respond(['ok' => true, 'data' => ['chatId' => $chatId]]);
+    } catch (Throwable $error) {
+        $db->rollback();
+        respond(['ok' => false, 'error' => 'Percakapan gagal dibuat.'], 500);
+    }
+}
+
+if ($method === 'POST' && $path === 'messages/send') {
+    $email = strtolower(requireString($body, 'email'));
+    $chatId = trim(requireString($body, 'chatId'));
+    $text = trim(requireString($body, 'text'));
+    if (!campusEmailIsValid($email) || $chatId === '' || $text === '') {
+        respond(['ok' => false, 'error' => 'Pesan atau identitas pengirim tidak valid.'], 422);
+    }
+
+    $membership = $db->prepare(
+        'SELECT c.id
+         FROM chats c
+         INNER JOIN chat_members cm ON cm.chat_id = c.id AND cm.email = ?
+         WHERE c.id = ? LIMIT 1',
+    );
+    $membership->bind_param('ss', $email, $chatId);
+    $membership->execute();
+    $member = $membership->get_result()->fetch_assoc();
+    $membership->close();
+    if ($member === null) {
+        respond(['ok' => false, 'error' => 'Anda bukan anggota percakapan ini.'], 403);
+    }
+
+    $userStatement = $db->prepare('SELECT nama FROM users WHERE email = ? LIMIT 1');
+    $userStatement->bind_param('s', $email);
+    $userStatement->execute();
+    $user = $userStatement->get_result()->fetch_assoc();
+    $userStatement->close();
+    if ($user === null) {
+        respond(['ok' => false, 'error' => 'Akun pengirim tidak ditemukan.'], 404);
+    }
+    setPresence($db, $email, true);
+
+    try {
+        $db->begin_transaction();
+        $senderName = (string) $user['nama'];
+        $insertMessage = $db->prepare(
+            'INSERT INTO messages (chat_id, pengirim, pengirim_email, teks, waktu, is_me)
+             VALUES (?, ?, ?, ?, UTC_TIMESTAMP(6), 1)',
+        );
+        $insertMessage->bind_param('ssss', $chatId, $senderName, $email, $text);
+        $insertMessage->execute();
+        $messageId = $db->insert_id;
+        $insertMessage->close();
+
+        $updateChat = $db->prepare('UPDATE chats SET updated_at = NOW() WHERE id = ?');
+        $updateChat->bind_param('s', $chatId);
+        $updateChat->execute();
+        $updateChat->close();
+
+        $recipientStatement = $db->prepare(
+            'SELECT email FROM chat_members WHERE chat_id = ? AND email <> ?',
+        );
+        $recipientStatement->bind_param('ss', $chatId, $email);
+        $recipientStatement->execute();
+        $recipients = $recipientStatement->get_result();
+        $notification = $db->prepare(
+            'INSERT INTO notifications
+              (notification_key, email, chat_id, title, message, waktu, is_read)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)',
+        );
+        $title = 'Pesan baru';
+        $noticeText = $senderName . ': ' . $text;
+        while ($recipient = $recipients->fetch_assoc()) {
+            $recipientEmail = strtolower((string) $recipient['email']);
+            $notificationKey = hash('sha256', $chatId . '|' . $messageId . '|' . $recipientEmail);
+            $notification->bind_param(
+                'sssss',
+                $notificationKey,
+                $recipientEmail,
+                $chatId,
+                $title,
+                $noticeText,
+            );
+            $notification->execute();
+        }
+        $notification->close();
+        $recipientStatement->close();
+        $db->commit();
+
+        respond(['ok' => true, 'data' => ['messageId' => $messageId]]);
+    } catch (Throwable $error) {
+        $db->rollback();
+        respond(['ok' => false, 'error' => 'Pesan gagal disimpan.'], 500);
+    }
+}
+
+if ($method === 'POST' && $path === 'chats/read') {
+    $email = strtolower(requireString($body, 'email'));
+    $chatId = trim(requireString($body, 'chatId'));
+    if (!campusEmailIsValid($email) || $chatId === '') {
+        respond(['ok' => false, 'error' => 'Identitas percakapan tidak valid.'], 422);
+    }
+    $membershipStatement = $db->prepare(
+        'SELECT 1 FROM chat_members WHERE chat_id = ? AND email = ? LIMIT 1',
+    );
+    $membershipStatement->bind_param('ss', $chatId, $email);
+    $membershipStatement->execute();
+    $isMember = $membershipStatement->get_result()->num_rows > 0;
+    $membershipStatement->close();
+    if (!$isMember) {
+        respond(['ok' => false, 'error' => 'Anda bukan anggota percakapan ini.'], 403);
+    }
+    $readStatement = $db->prepare(
+        'UPDATE chat_members SET last_read_at = UTC_TIMESTAMP(6) WHERE chat_id = ? AND email = ?',
+    );
+    $readStatement->bind_param('ss', $chatId, $email);
+    $readStatement->execute();
+    $readStatement->close();
+    $notificationStatement = $db->prepare(
+        'UPDATE notifications SET is_read = 1 WHERE email = ? AND chat_id = ?',
+    );
+    $notificationStatement->bind_param('ss', $email, $chatId);
+    $notificationStatement->execute();
+    $notificationStatement->close();
+    respond(['ok' => true, 'data' => ['read' => true]]);
+}
+
+if ($method === 'POST' && $path === 'notifications/read-all') {
+    $email = strtolower(requireString($body, 'email'));
+    if (!campusEmailIsValid($email)) {
+        respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+    }
+    $statement = $db->prepare('UPDATE notifications SET is_read = 1 WHERE email = ?');
+    $statement->bind_param('s', $email);
+    $statement->execute();
+    $statement->close();
+    respond(['ok' => true, 'data' => ['read' => true]]);
 }
 
 if ($method === 'POST' && $path === 'auth/admin-login') {
@@ -295,31 +491,58 @@ if ($method === 'GET') {
     $adminEmail = strtolower($config['admin']['email']);
     $chatQuery = $isAdminRequest
         ? 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
-                  p.is_online AS peer_online, p.last_seen AS peer_last_seen,
+                  CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                       THEN 1 ELSE 0 END AS peer_online,
+                  p.last_seen AS peer_last_seen,
+                  (SELECT COUNT(*) FROM messages unread_message
+                   INNER JOIN chat_members unread_member
+                     ON unread_member.chat_id = unread_message.chat_id
+                    AND unread_member.email = ?
+                   WHERE unread_message.chat_id = c.id
+                     AND unread_message.pengirim_email <> ?
+                     AND unread_message.waktu > COALESCE(unread_member.last_read_at, unread_member.joined_at)
+                  ) AS user_unread_count,
                   r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
                   r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
-                  r.user_email AS report_owner_email
+                  r.user_email AS report_owner_email,
+                  owner_user.nama AS peer_name
            FROM chats c
            INNER JOIN reports r ON r.id = c.barang_id
            LEFT JOIN user_presence p ON p.email = c.owner_email
+           LEFT JOIN users owner_user ON owner_user.email = c.owner_email
            ORDER BY c.updated_at DESC'
         : 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
-                  peer_presence.is_online AS peer_online,
+                  CASE WHEN peer_presence.is_online = 1 AND peer_presence.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                       THEN 1 ELSE 0 END AS peer_online,
                   peer_presence.last_seen AS peer_last_seen,
+                  (SELECT COUNT(*) FROM messages unread_message
+                   WHERE unread_message.chat_id = c.id
+                     AND unread_message.pengirim_email <> member.email
+                     AND unread_message.waktu > COALESCE(member.last_read_at, member.joined_at)
+                  ) AS user_unread_count,
                   r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
                   r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
-                  r.user_email AS report_owner_email
+                  r.user_email AS report_owner_email,
+                  peer_user.nama AS peer_name
            FROM chats c
            INNER JOIN reports r ON r.id = c.barang_id
            INNER JOIN chat_members member
              ON member.chat_id = c.id AND member.email = ?
            LEFT JOIN chat_members peer
              ON peer.chat_id = c.id AND peer.email <> member.email
+            AND peer.email = (SELECT preferred_peer.email FROM chat_members preferred_peer
+                              WHERE preferred_peer.chat_id = c.id
+                                AND preferred_peer.email <> member.email
+                              ORDER BY (preferred_peer.email = r.user_email) DESC,
+                                       preferred_peer.joined_at ASC LIMIT 1)
            LEFT JOIN user_presence peer_presence
              ON peer_presence.email = peer.email
+           LEFT JOIN users peer_user ON peer_user.email = peer.email
            ORDER BY c.updated_at DESC';
     $chatStatement = $db->prepare($chatQuery);
-    if (!$isAdminRequest) {
+    if ($isAdminRequest) {
+        $chatStatement->bind_param('ss', $email, $email);
+    } else {
         $chatStatement->bind_param('s', $email);
     }
     $chatStatement->execute();
@@ -353,6 +576,7 @@ if ($method === 'GET') {
 
         $chats[] = [
             'id' => $row['chat_id'],
+            'peerName' => $row['peer_name'],
             'barang' => [
                 'id' => $row['report_id'],
                 'nama' => $row['nama'],
@@ -369,7 +593,7 @@ if ($method === 'GET') {
             'pesanList' => $messages,
             'isOnline' => (bool) ($row['peer_online'] ?? $row['is_online']),
             'lastSeen' => isoDate($row['peer_last_seen'] ?? $row['last_seen']),
-            'unreadCount' => (int) $row['unread_count'],
+            'unreadCount' => (int) $row['user_unread_count'],
         ];
     }
 
@@ -378,7 +602,7 @@ if ($method === 'GET') {
 
     $notifications = [];
     $notificationStatement = $db->prepare(
-        'SELECT title, message, waktu, is_read
+        'SELECT title, message, waktu, is_read, chat_id
          FROM notifications
          WHERE (? = ? OR email = ?)
          ORDER BY waktu DESC',
@@ -393,6 +617,7 @@ if ($method === 'GET') {
             'message' => $notification['message'],
             'waktu' => isoDate($notification['waktu']),
             'isRead' => (bool) $notification['is_read'],
+            'chatId' => $notification['chat_id'],
         ];
     }
 
@@ -420,10 +645,10 @@ if ($identityError !== null) {
 setPresence($db, $email, true);
 
 $reports = is_array($body['reports'] ?? null) ? $body['reports'] : [];
-$chats = is_array($body['chats'] ?? null) ? $body['chats'] : [];
-$notifications = is_array($body['notifications'] ?? null)
-    ? $body['notifications']
-    : [];
+// Chat dan notifikasi ditulis melalui endpoint khusus agar snapshot client
+// tidak pernah menghapus atau menimpa pesan yang dikirim akun lain.
+$chats = [];
+$notifications = [];
 
 try {
     $db->begin_transaction();

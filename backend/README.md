@@ -58,11 +58,16 @@ GET /api/index.php?path=health
 - `POST ?path=auth/login`
 - `POST ?path=auth/admin-login`
 - `POST ?path=presence`
+- `POST ?path=chats/start`
+- `POST ?path=messages/send`
+- `POST ?path=chats/read`
+- `POST ?path=notifications/read-all`
 - `GET ?path=sync&email=nim@student.uin-malang.ac.id`
 - `GET ?path=admin/sync` dengan header `X-Admin-Token`
 - `POST ?path=sync`
 - `DELETE ?path=reports&email=...&id=...` hanya untuk pemilik laporan
 
-Backend menjadi sumber data bersama untuk semua akun. Hive di Flutter hanya
-menjadi buffer lokal dan tidak dipakai untuk mencampurkan data antar akun saat
-API tidak tersedia.
+Backend menjadi sumber data bersama untuk semua akun. Endpoint sync hanya
+memperbarui laporan; pesan ditambahkan melalui `messages/send`, sehingga
+snapshot perangkat tidak dapat menghapus pesan pengguna lain. Status online
+diperbarui tiap lima detik dan ditandai offline setelah heartbeat berhenti.

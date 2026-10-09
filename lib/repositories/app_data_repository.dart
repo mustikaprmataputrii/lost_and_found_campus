@@ -65,6 +65,32 @@ class AppDataRepository {
     }
   }
 
+  Future<String> startChat({
+    required String email,
+    required String reportId,
+  }) {
+    return _remote.startChat(email: email, reportId: reportId);
+  }
+
+  Future<void> sendMessage({
+    required String email,
+    required String chatId,
+    required String text,
+  }) {
+    return _remote.sendMessage(email: email, chatId: chatId, text: text);
+  }
+
+  Future<void> markChatRead({
+    required String email,
+    required String chatId,
+  }) {
+    return _remote.markChatRead(email: email, chatId: chatId);
+  }
+
+  Future<void> markNotificationsRead({required String email}) {
+    return _remote.markNotificationsRead(email: email);
+  }
+
   Future<void> deleteReport({
     required String email,
     required String reportId,

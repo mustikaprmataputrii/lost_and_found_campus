@@ -96,17 +96,20 @@ def create_diagrams():
                  height=650)
 
     data_boxes = [
-        (80, 150, 290, 220, "users\n(id, nim, email, nama)", "#E8F3ED"),
-        (510, 80, 320, 240, "reports\n(id, nama, lokasi, jenis,\npelapor, status, foto)", "#FFF3D4"),
-        (980, 80, 330, 240, "chats\n(id, barang_id, owner_email,\nis_online, unread_count)", "#E8F3ED"),
-        (980, 420, 330, 180, "messages\n(chat_id, pengirim,\nteks, waktu)", "#FFFFFF"),
-        (510, 440, 320, 160, "notifications\n(email, title, message,\nwaktu, is_read)", "#FFFFFF"),
-        (80, 450, 290, 150, "admins\n(config backend + token)", "#FFF3D4"),
+        (40, 145, 300, 220, "users\n(nim, email UNIQUE, nama)", "#E8F3ED"),
+        (420, 65, 340, 240, "reports\n(user_email, nama, lokasi,\njenis, foto, status)", "#FFF3D4"),
+        (850, 65, 310, 220, "chats\n(barang_id, owner_email,\nunread_count)", "#E8F3ED"),
+        (1190, 60, 270, 210, "chat_members\n(chat_id, email)\nanggota percakapan", "#FFF3D4"),
+        (850, 390, 310, 200, "messages\n(chat_id, pengirim_email,\nteks, waktu)", "#FFFFFF"),
+        (420, 420, 340, 190, "notifications\n(email, title, message,\nwaktu, is_read)", "#FFFFFF"),
+        (40, 440, 300, 160, "user_presence\n(email, is_online,\nlast_seen)", "#E8F3ED"),
+        (1190, 390, 270, 200, "admin\n(config backend + token)", "#FFF3D4"),
     ]
     data_arrows = [
-        (370, 230, 510, 200), (830, 200, 980, 200),
-        (1145, 320, 1145, 420), (830, 500, 510, 520),
-        (370, 510, 510, 520), (370, 245, 980, 500),
+        (340, 220, 420, 180), (760, 185, 850, 165),
+        (1160, 170, 1190, 160), (1005, 285, 1005, 390),
+        (760, 500, 850, 490), (340, 515, 420, 520),
+        (340, 250, 850, 455), (1160, 485, 1190, 485),
     ]
     make_diagram(DOCS / "model_data.png",
                  "Rancangan Model Data", data_boxes, data_arrows,
@@ -339,7 +342,7 @@ def build_report():
         ("Kelas / mata kuliah", "[Isi kelas dan mata kuliah]"),
         ("Dosen pengampu", "[Isi nama dosen]"),
         ("Platform", "Flutter: Web, Android, iOS, Windows, macOS, Linux"),
-        ("Tanggal laporan", "7 Oktober 2026"),
+        ("Tanggal laporan", "9 Oktober 2026"),
     ], widths=[5, 10], font_size=9)
     doc.add_paragraph()
     p = doc.add_paragraph()
@@ -355,13 +358,14 @@ def build_report():
         "melaporkan barang hilang atau ditemukan, mencari laporan, berkomunikasi melalui "
         "chat, dan memantau proses klaim. Aplikasi menggunakan Flutter untuk antarmuka "
         "lintas platform, REST API PHP sebagai layanan backend, MySQL/MariaDB sebagai "
-        "database utama, dan Hive sebagai cache atau fallback lokal."
+        "database utama, dan Hive untuk penyimpanan lokal perangkat."
     )
     doc.add_paragraph(
-        "MVP yang dihasilkan telah mencakup autentikasi mahasiswa berbasis email resmi "
-        "UIN Malang, login admin terpisah, dashboard, laporan, upload foto, chat, "
-        "notifikasi popup, badge jumlah pesan, status online/last seen, database, "
-        "validasi masukan, pengujian, serta repository Git."
+        "MVP yang dihasilkan telah mencakup login mahasiswa berbasis email resmi "
+        "UIN Malang dengan identitas email, NIM, dan nama yang terkunci, login admin "
+        "terpisah, dashboard, laporan bersama, upload foto, chat antaranggota, notifikasi, "
+        "badge jumlah pesan, status online/last seen dari backend, database, validasi, "
+        "pengujian, serta repository Git. Sinkronisasi data berjalan berkala melalui API."
     )
     doc.add_heading("Tautan Bukti Project", level=2)
     p = doc.add_paragraph("Repository GitHub: ")
@@ -403,15 +407,17 @@ def build_report():
     doc.add_heading("BAB II - TAHAP 2: PERANCANGAN SISTEM DAN ANTARMUKA", level=1)
     doc.add_heading("2.1 Analisis Kebutuhan Fungsional", level=2)
     add_table(doc, ["Kode", "Kebutuhan", "Aktor"], [
-        ("F-01", "Login mahasiswa dengan format NIM@student.uin-malang.ac.id", "Mahasiswa"),
+        ("F-01", "Login email kampus; satu email terikat pada satu NIM dan nama", "Mahasiswa"),
         ("F-02", "Login admin dengan email dan password yang diverifikasi backend", "Admin"),
         ("F-03", "Melihat dashboard dan ringkasan aktivitas", "Mahasiswa/Admin"),
         ("F-04", "Menjelajah, mencari, dan memfilter laporan", "Mahasiswa"),
         ("F-05", "Membuat laporan barang hilang atau ditemukan", "Mahasiswa"),
         ("F-06", "Memilih foto dari kamera atau galeri", "Mahasiswa"),
-        ("F-07", "Membuka chat, mengirim pesan, dan melihat online/last seen", "Mahasiswa/Admin"),
+        ("F-07", "Chat antaranggota laporan, kirim pesan, dan lihat online/last seen", "Mahasiswa/Admin"),
         ("F-08", "Menerima popup notifikasi dan badge jumlah pesan", "Mahasiswa"),
         ("F-09", "Melihat seluruh data melalui dashboard admin", "Admin"),
+        ("F-10", "Melihat laporan dari semua akun dan menghapus laporan milik sendiri", "Mahasiswa"),
+        ("F-11", "Sinkronisasi laporan, chat, dan notifikasi berkala dari backend", "Mahasiswa"),
     ], widths=[2, 10, 3], font_size=7)
     doc.add_heading("2.2 Kebutuhan Nonfungsional", level=2)
     add_bullets(doc, [
@@ -419,20 +425,22 @@ def build_report():
         "Konsistensi: warna hijau UIN, emas, dan sand digunakan di seluruh halaman.",
         "Keterbacaan: ukuran teks, kontras, label, status, dan validasi dibuat jelas.",
         "Lintas platform: target Flutter mencakup web, Android, iOS, Windows, macOS, dan Linux.",
-        "Keandalan data: MySQL/MariaDB menjadi penyimpanan utama dan Hive menjadi fallback lokal.",
+        "Keandalan data: MySQL/MariaDB menjadi sumber data bersama; cache lokal tidak ditampilkan lintas akun saat API gagal.",
     ])
     doc.add_heading("2.3 Diagram Alur Aplikasi", level=2)
     doc.add_picture(str(DOCS / "diagram_alur_aplikasi.png"), width=Cm(16))
     add_caption(doc, "Gambar 1. Diagram alur utama aplikasi TEMU")
     doc.add_heading("2.4 Kasus Penggunaan dan Skenario", level=2)
     add_table(doc, ["Kode", "Kasus penggunaan", "Skenario ringkas", "Hasil"], [
-        ("UC-01", "Login mahasiswa", "Mahasiswa mengisi nama dan email kampus yang valid.", "Masuk ke dashboard mahasiswa"),
+        ("UC-01", "Login mahasiswa", "Mahasiswa memasukkan nama dan email kampus; identitas harus sama dengan yang terdaftar.", "Masuk ke dashboard; identitas berbeda ditolak"),
         ("UC-02", "Login admin", "Admin memilih mode admin lalu memasukkan email dan password.", "Masuk ke dashboard admin"),
         ("UC-03", "Mencari laporan", "Pengguna membuka Jelajah, mencari nama/deskripsi, dan memakai filter.", "Daftar laporan sesuai kriteria"),
         ("UC-04", "Membuat laporan", "Pengguna mengisi nama barang, lokasi, detail, kontak, jenis, dan foto.", "Laporan divalidasi dan tersimpan"),
         ("UC-05", "Chat klaim", "Pengguna membuka detail barang dan mengirim pesan.", "Pesan masuk ke sesi chat"),
         ("UC-06", "Notifikasi", "Pesan baru memicu popup dan badge jumlah.", "Pengguna mengetahui aktivitas baru"),
         ("UC-07", "Monitoring admin", "Admin membuka tab laporan, chat, atau notifikasi.", "Admin melihat seluruh data"),
+        ("UC-08", "Interaksi lintas akun", "Pengguna membuka laporan milik pengguna lain dan memulai percakapan.", "Anggota melihat pesan dan notifikasi dari server bersama"),
+        ("UC-09", "Hapus laporan", "Pemilik memilih hapus pada detail laporan dan mengonfirmasi.", "Laporan terhapus untuk semua akun; akun lain ditolak"),
     ], widths=[2, 3, 8, 3], font_size=7)
     doc.add_heading("2.5 Struktur Navigasi Aplikasi", level=2)
     doc.add_picture(str(DOCS / "struktur_navigasi.png"), width=Cm(16))
@@ -441,11 +449,13 @@ def build_report():
     doc.add_picture(str(DOCS / "model_data.png"), width=Cm(16))
     add_caption(doc, "Gambar 3. Model data yang digunakan")
     add_table(doc, ["Entitas", "Atribut penting", "Fungsi"], [
-        ("users", "id, nim, email, nama", "Menyimpan identitas mahasiswa yang login"),
-        ("reports", "id, nama, lokasi, jenis, pelapor, status, foto", "Menyimpan laporan barang"),
-        ("chats", "id, barang_id, owner_email, is_online, unread_count", "Menyimpan sesi percakapan"),
-        ("messages", "chat_id, pengirim, teks, waktu, is_me", "Menyimpan isi pesan"),
-        ("notifications", "email, title, message, waktu, is_read", "Menyimpan notifikasi pengguna"),
+        ("users", "nim UNIQUE, email UNIQUE, nama", "Menyimpan identitas tunggal; email tidak dapat dipakai dengan NIM/nama lain"),
+        ("reports", "id, user_email, nama, lokasi, jenis, status, foto", "Menyimpan laporan bersama beserta pemiliknya"),
+        ("chats", "id, barang_id, owner_email, unread_count", "Menyimpan sesi chat terkait laporan"),
+        ("chat_members", "chat_id, email", "Menentukan akun yang dapat melihat percakapan"),
+        ("messages", "chat_id, pengirim_email, teks, waktu", "Menyimpan pesan beserta identitas pengirim"),
+        ("user_presence", "email, is_online, last_seen", "Menyimpan status kehadiran dan waktu terakhir aktif"),
+        ("notifications", "notification_key, email, title, message, is_read", "Menyimpan notifikasi per akun"),
         ("admin config", "email, password, name, secret", "Konfigurasi akses admin backend"),
     ], widths=[3, 8, 6], font_size=8)
     doc.add_heading("2.7 Sketsa Awal / Wireframe", level=2)
@@ -454,8 +464,8 @@ def build_report():
         ("Login", "Logo UIN - nama aplikasi - input nama/email atau email/password admin - tombol masuk - pilihan mode"),
         ("Dashboard mahasiswa", "AppBar - salam pengguna - kartu ringkasan - akses cepat Jelajah/Lapor - ringkasan aktivitas"),
         ("Jelajah", "AppBar - search - filter - daftar kartu barang - status ditemukan/hilang - lokasi"),
-        ("Lapor", "Form nama, lokasi, detail, kontak, jenis - kartu foto - tombol Kamera/Galeri - terbitkan"),
-        ("Chat", "Daftar sesi - preview pesan - badge unread - Online/last seen - room chat"),
+        ("Lapor", "Form nama, lokasi, detail, kontak, jenis - kamera/galeri - detail - hapus khusus pemilik"),
+        ("Chat", "Daftar chat anggota - preview pesan - badge unread - online/last seen backend - room chat"),
         ("Profil", "Logo - identitas - status verifikasi - waktu sesi - tombol logout"),
         ("Admin", "AppBar admin - kartu statistik - tab Laporan, Chat, Notifikasi - detail data"),
     ], widths=[4, 13], font_size=8)
@@ -518,25 +528,38 @@ backend/
     ], widths=[6, 11], font_size=8)
     doc.add_heading("3.5 Pengelolaan Data", level=2)
     doc.add_paragraph(
-        "AppDataRepository menjadi penghubung antara UI, API, dan penyimpanan lokal. "
-        "Saat API tersedia, data disimpan dan dimuat dari MySQL melalui endpoint REST. "
-        "Saat API tidak tersedia, aplikasi menggunakan cache Hive agar MVP masih dapat "
-        "dibuka dan diuji. Endpoint admin memakai token sesi untuk memuat seluruh data."
+        "AppDataRepository menjadi penghubung UI dan API; MySQL/MariaDB adalah sumber "
+        "data bersama untuk seluruh akun. Hive menyimpan salinan lokal perangkat, sementara "
+        "data akun tidak diambil dari cache lokal ketika API gagal. Aplikasi menarik data "
+        "baru setiap lima detik dan saat pengguna menyegarkan Jelajah. Laporan dari akun "
+        "mana pun dikirim ke server dan ditampilkan pada semua akun. Percakapan dibuat per "
+        "laporan dan pasangan akun; pesan ditambahkan sebagai record baru melalui endpoint "
+        "khusus, sedangkan snapshot sync tidak pernah menulis ulang pesan. Endpoint admin "
+        "memakai token sesi untuk memuat seluruh data."
     )
     add_code(doc, """POST /api/index.php?path=auth/login
 POST /api/index.php?path=auth/admin-login
+POST /api/index.php?path=presence
+POST /api/index.php?path=chats/start
+POST /api/index.php?path=messages/send
+POST /api/index.php?path=chats/read
+POST /api/index.php?path=notifications/read-all
 GET  /api/index.php?path=sync&email=...
 GET  /api/index.php?path=admin/sync
-POST /api/index.php?path=sync""")
+POST /api/index.php?path=sync
+DELETE /api/index.php?path=reports&email=...&id=...""")
     doc.add_heading("3.6 Implementasi Fitur Utama", level=2)
     add_bullets(doc, [
-        "Login mahasiswa dengan pembatasan domain email resmi kampus.",
+        "Login mahasiswa membatasi domain email kampus dan menolak email dengan nama/NIM berbeda dari catatan database.",
         "Login admin dan dashboard monitoring terpisah dari dashboard mahasiswa.",
         "Laporan barang hilang/ditemukan dengan status dan detail.",
         "Upload foto kamera atau galeri melalui image_picker.",
-        "Chat klaim dengan status Online atau Terakhir dilihat.",
-        "Popup notifikasi pesan dan badge jumlah chat/pemberitahuan.",
-        "Database MySQL/MariaDB dan fallback Hive lokal.",
+        "Chat klaim per laporan dan pasangan akun dengan pesan append-only pada database bersama.",
+        "Popup pesan masuk, notifikasi per penerima, serta badge jumlah chat/pemberitahuan.",
+        "Status online dan last seen dibaca dari tabel presence backend.",
+        "Penghapusan laporan dibatasi pada pemilik dan berlaku untuk semua akun.",
+        "MySQL/MariaDB menjadi sumber data bersama; Hive menyimpan cache perangkat tanpa fallback silang akun.",
+        "Sinkronisasi berkala lima detik memperbarui laporan, chat, dan notifikasi.",
     ])
     doc.add_heading("3.7 Pengujian dan Hasil Verifikasi", level=2)
     add_table(doc, ["Pemeriksaan", "Hasil", "Keterangan"], [
@@ -544,7 +567,14 @@ POST /api/index.php?path=sync""")
         ("Flutter analyze", "LULUS", "No issues found"),
         ("PHP lint", "LULUS", "Tidak ada syntax error pada API dan config"),
         ("API admin login", "LULUS", "Menghasilkan token admin"),
+        ("Chat dua akun", "LULUS", "Pesan dari akun pengirim terlihat pada akun penerima; unread dan notifikasi terbuat"),
+        ("Proteksi pesan", "LULUS", "Sinkronisasi snapshot lama tidak menghapus pesan tersimpan"),
+        ("Tandai sudah dibaca", "LULUS", "Unread count kembali menjadi nol dan notifikasi chat ditandai dibaca"),
+        ("Presence", "LULUS", "Heartbeat UTC menunjukkan status Online dan waktu last seen"),
         ("API admin sync", "LULUS", "Mengembalikan seluruh laporan, chat, dan notifikasi"),
+        ("Kunci identitas email", "LULUS", "Identitas berbeda ditolak HTTP 409; identitas terdaftar diterima"),
+        ("Batas penghapusan laporan", "LULUS", "Akun selain pemilik ditolak HTTP 403"),
+        ("API sync pengguna", "LULUS", "Database aktif; pemeriksaan mengembalikan 3 laporan, 1 chat, dan 2 notifikasi"),
         ("Flutter build web", "LULUS", "Build Web berhasil dikompilasi"),
         ("Git", "LULUS", "Commit tersedia pada branch main"),
     ], widths=[5, 3, 9], font_size=8)
@@ -559,7 +589,7 @@ POST /api/index.php?path=sync""")
     p = doc.add_paragraph("Link repository: ")
     add_hyperlink(p, "https://github.com/mustikaprmataputrii/lost_and_found_campus",
                   "https://github.com/mustikaprmataputrii/lost_and_found_campus")
-    p = doc.add_paragraph("Commit utama implementasi admin: 732d5fa")
+    p = doc.add_paragraph("Versi kode terbaru tersedia pada branch main repository GitHub.")
     p.runs[0].font.name = "Consolas"
     doc.add_page_break()
 
@@ -577,7 +607,7 @@ POST /api/index.php?path=sync""")
         ("6", "Chat", "Tampilkan daftar chat, badge angka, room chat, dan Online/last seen."),
         ("7", "Notifikasi", "Tampilkan popup pesan masuk dan halaman pemberitahuan."),
         ("8", "Dashboard admin", "Login admin lalu screenshot statistik dan tab Laporan/Chat/Notifikasi."),
-        ("9", "Database", "Buka phpMyAdmin database lost_and_found_campus dan screenshot tabel users, reports, chats, messages, notifications."),
+        ("9", "Database", "Buka phpMyAdmin database lost_and_found_campus dan screenshot tabel users, reports, chats, chat_members, messages, user_presence, notifications."),
         ("10", "Testing", "Screenshot terminal hasil flutter test, analyze, build web, dan PHP lint."),
         ("11", "GitHub", "Buka repository GitHub dan screenshot daftar file serta commit terbaru."),
     ], widths=[1.2, 6.5, 9.3], font_size=7)
@@ -597,23 +627,34 @@ POST /api/index.php?path=sync""")
     doc.add_heading("BAB V - KESIMPULAN", level=1)
     doc.add_paragraph(
         "Tahap 2 telah menghasilkan rancangan alur aplikasi, use case, struktur navigasi, "
-        "model data, wireframe, dan purwarupa antarmuka. Tahap 3 telah mengimplementasikan "
+        "model data multiakun, wireframe, dan purwarupa antarmuka. Tahap 3 telah mengimplementasikan "
         "rancangan tersebut menjadi MVP Flutter yang dapat dijalankan pada target platform "
         "yang tersedia, terhubung ke backend REST API dan database MySQL/MariaDB, serta "
         "memiliki validasi masukan dan pengujian."
     )
     doc.add_paragraph(
         "Dengan adanya dashboard mahasiswa dan dashboard admin, aplikasi telah memiliki "
-        "pemisahan akses sesuai peran pengguna. Fitur utama Lost & Found—laporan, pencarian, "
-        "chat, notifikasi, upload foto, penyimpanan data, dan monitoring admin—telah dapat "
-        "digunakan sebagai dasar pengembangan tahap berikutnya."
+        "pemisahan akses sesuai peran. Identitas mahasiswa dikunci pada email, NIM, dan nama "
+        "terdaftar. Laporan tersedia lintas akun dari database bersama; chat, pesan, notifikasi, "
+        "badge, serta status online/last seen dikelola backend. Pemilik dapat menghapus "
+        "laporannya dan penghapusan berlaku bagi semua akun. Fitur ini melengkapi pencarian, "
+        "upload foto, penyimpanan data, dan monitoring admin sebagai MVP."
     )
     doc.add_heading("Pengembangan Lanjutan", level=2)
+    doc.add_paragraph(
+        "Catatan batas implementasi: pemeriksaan nama dan NIM mencegah satu alamat email "
+        "dipakai dengan identitas berbeda, tetapi belum memverifikasi bahwa pengguna benar-benar "
+        "memiliki kotak email tersebut. Sinkronisasi chat menggunakan polling berkala lima "
+        "detik, sehingga pembaruan tidak instan. Backend Laragon saat ini ditujukan untuk "
+        "pengembangan dan demonstrasi; sebelum dipublikasikan perlu autentikasi pengguna "
+        "yang terverifikasi serta pembatasan akses endpoint berdasarkan sesi/token."
+    )
     add_bullets(doc, [
         "Mengganti kredensial admin demo dengan password hash dan manajemen akun admin pada database.",
         "Menyempurnakan kamera web desktop menggunakan preview webcam berbasis getUserMedia.",
-        "Menambahkan autentikasi token yang lebih kuat, role permission, dan audit log.",
-        "Menambahkan notifikasi push dan deployment backend ke server publik.",
+        "Menambahkan autentikasi mahasiswa dengan OTP atau penyedia identitas resmi; login saat ini mengunci identitas tetapi belum membuktikan kepemilikan email.",
+        "Menerapkan WebSocket atau push notification untuk pengiriman instan; sinkronisasi saat ini berjalan berkala setiap lima detik.",
+        "Memperkuat izin server untuk endpoint sinkronisasi dan status kehadiran sebelum deployment publik.",
     ])
 
     doc.save(OUTPUT)
@@ -622,4 +663,3 @@ POST /api/index.php?path=sync""")
 
 if __name__ == "__main__":
     build_report()
-

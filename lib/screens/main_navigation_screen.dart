@@ -40,9 +40,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     unawaited(AppDataRepository()
         .updatePresence(email: widget.email, isOnline: true));
     await _sinkronkanDariServer(showPopup: false);
-    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      unawaited(_sinkronkanDariServer());
-    });
+    _mulaiSinkronisasiBerkala();
     await Future<void>.delayed(const Duration(milliseconds: 700));
     if (mounted && _daftarSesiChat.isNotEmpty) {
       final sesi = _daftarSesiChat.first;
@@ -50,6 +48,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         _tampilkanPopupPesan(sesi, sesi.pesanList.last);
       }
     }
+  }
+
+  void _mulaiSinkronisasiBerkala() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(AppDataRepository()
+          .updatePresence(email: widget.email, isOnline: true));
+      unawaited(_sinkronkanDariServer());
+    });
   }
 
   Future<void> _sinkronkanDariServer({bool showPopup = true}) async {
@@ -63,11 +70,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       final incoming = <(SesiChat, PesanChat)>[];
       for (final sesi in snapshot.chats) {
         final previous = oldChats[sesi.id];
-        if (previous == null) continue;
         final previousMessages =
-            previous.pesanList.map(_signaturePesan).toSet();
+            previous?.pesanList.map(_signaturePesan).toSet() ?? <String>{};
         for (final pesan in sesi.pesanList) {
-          if (!pesan.isMe &&
+          if (pesan.pengirimEmail != widget.email &&
+              !pesan.isMe &&
               !previousMessages.contains(_signaturePesan(pesan))) {
             incoming.add((sesi, pesan));
           }
@@ -109,11 +116,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _timer?.cancel();
+      _syncTimer?.cancel();
       _simpanWaktuSesi();
       unawaited(AppDataRepository()
           .updatePresence(email: widget.email, isOnline: false));
     } else if (state == AppLifecycleState.resumed) {
       _mulaiTimer();
+      _mulaiSinkronisasiBerkala();
       unawaited(AppDataRepository()
           .updatePresence(email: widget.email, isOnline: true));
     }
@@ -239,35 +248,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     _tampilkanPopupPesan(sesi, pesan);
   }
 
-  void _bukaChatDariBarang(BarangItem item) {
-    var index = _daftarSesiChat.indexWhere((sesi) => sesi.barang.id == item.id);
-    if (index < 0) {
-      _daftarSesiChat.add(SesiChat(
-          id: 'chat_${DateTime.now().millisecondsSinceEpoch}',
-          barang: item,
-          lastSeen: DateTime.now().subtract(const Duration(minutes: 12)),
-          pesanList: [
-            PesanChat(
-                pengirim: 'Sistem TEMU',
-                teks: 'Sesi konsultasi klaim barang telah dibuka.',
-                waktu: DateTime.now(),
-                isMe: false)
-          ]));
-      index = _daftarSesiChat.length - 1;
+  Future<void> _bukaChatDariBarang(BarangItem item) async {
+    try {
+      await AppDataRepository().startChat(
+        email: widget.email,
+        reportId: item.id,
+      );
+      await _sinkronkanDariServer(showPopup: false);
+      if (!mounted) return;
+      final sesi = _daftarSesiChat.firstWhere(
+        (itemChat) => itemChat.barang.id == item.id,
+      );
+      _bukaChat(sesi);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', ''))));
     }
-    _bukaChat(_daftarSesiChat[index]);
   }
 
   void _bukaChat(SesiChat sesi) {
     setState(() {
       sesi.unreadCount = 0;
       for (final item in _notifikasi) {
-        if (item.title == 'Pesan baru' &&
-            item.message.contains(sesi.barang.nama)) {
+        if (item.chatId == sesi.id ||
+            (item.chatId == null &&
+                item.title == 'Pesan baru' &&
+                item.message.contains(sesi.barang.nama))) {
           item.isRead = true;
         }
       }
     });
+    unawaited(_tandaiChatDibaca(sesi.id));
     unawaited(_simpanData());
     Navigator.push(
         context,
@@ -276,10 +288,49 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 sesi: sesi,
                 currentUserName: widget.nama,
                 currentUserEmail: widget.email,
+                onSendMessage: (text) => _kirimPesanKeServer(sesi.id, text),
+                onRefresh: () => _muatSesiTerbaru(sesi.id),
                 onStatusChanged: () {
                   setState(() {});
                   unawaited(_simpanData());
                 })));
+  }
+
+  Future<SesiChat?> _kirimPesanKeServer(String chatId, String text) async {
+    await AppDataRepository()
+        .sendMessage(email: widget.email, chatId: chatId, text: text);
+    return _muatSesiTerbaru(chatId, markRead: false);
+  }
+
+  Future<void> _tandaiChatDibaca(String chatId) async {
+    try {
+      await AppDataRepository()
+          .markChatRead(email: widget.email, chatId: chatId);
+    } catch (_) {
+      // Sinkronisasi room akan mencoba kembali ketika API dapat dijangkau.
+    }
+  }
+
+  Future<SesiChat?> _muatSesiTerbaru(String chatId,
+      {bool markRead = true}) async {
+    if (markRead) await _tandaiChatDibaca(chatId);
+    final snapshot = await AppDataRepository().load(email: widget.email);
+    if (!mounted) return null;
+    setState(() {
+      _daftarBarang
+        ..clear()
+        ..addAll(snapshot.reports);
+      _daftarSesiChat
+        ..clear()
+        ..addAll(snapshot.chats);
+      _notifikasi
+        ..clear()
+        ..addAll(snapshot.notifications);
+    });
+    for (final item in _daftarSesiChat) {
+      if (item.id == chatId) return item;
+    }
+    return null;
   }
 
   void _bukaNotifikasi() {
@@ -288,7 +339,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         item.isRead = true;
       }
     });
-    unawaited(_simpanData());
+    unawaited(AppDataRepository().markNotificationsRead(email: widget.email));
     showModalBottomSheet<void>(
         context: context,
         backgroundColor: UINColors.sand,

@@ -104,6 +104,7 @@ class PesanChat {
 class SesiChat {
   final String id;
   final BarangItem barang;
+  final String? peerName;
   final List<PesanChat> pesanList;
   final bool isOnline;
   final DateTime? lastSeen;
@@ -112,6 +113,7 @@ class SesiChat {
   SesiChat(
       {required this.id,
       required this.barang,
+      this.peerName,
       required this.pesanList,
       this.isOnline = false,
       this.lastSeen,
@@ -120,6 +122,7 @@ class SesiChat {
   Map<String, dynamic> toMap() => {
         'id': id,
         'barang': barang.toMap(),
+        'peerName': peerName,
         'pesanList': pesanList.map((pesan) => pesan.toMap()).toList(),
         'isOnline': isOnline,
         'lastSeen': lastSeen?.toIso8601String(),
@@ -132,6 +135,7 @@ class SesiChat {
       id: '${raw['id'] ?? ''}',
       barang:
           BarangItem.fromMap(Map<dynamic, dynamic>.from(raw['barang'] as Map)),
+      peerName: raw['peerName'] == null ? null : '${raw['peerName']}',
       pesanList: rawMessages is List
           ? rawMessages
               .map((item) =>
@@ -151,18 +155,21 @@ class NotifikasiItem {
   final String title;
   final String message;
   final DateTime waktu;
+  final String? chatId;
   bool isRead;
 
   NotifikasiItem(
       {required this.title,
       required this.message,
       required this.waktu,
+      this.chatId,
       this.isRead = false});
 
   Map<String, dynamic> toMap() => {
         'title': title,
         'message': message,
         'waktu': waktu.toIso8601String(),
+        'chatId': chatId,
         'isRead': isRead,
       };
 
@@ -170,6 +177,7 @@ class NotifikasiItem {
         title: '${raw['title'] ?? ''}',
         message: '${raw['message'] ?? ''}',
         waktu: DateTime.tryParse('${raw['waktu']}') ?? DateTime.now(),
+        chatId: raw['chatId'] == null ? null : '${raw['chatId']}',
         isRead: raw['isRead'] == true,
       );
 }

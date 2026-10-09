@@ -43,7 +43,8 @@ class DaftarChatScreen extends StatelessWidget {
                                         backgroundColor: UINColors.mint,
                                         child: Icon(Icons.chat_bubble_outline,
                                             color: UINColors.primary))),
-                                title: Text(sesi.barang.nama,
+                                title: Text(
+                                    sesi.peerName ?? sesi.barang.pelapor,
                                     style: TextStyle(
                                         fontWeight: sesi.unreadCount > 0
                                             ? FontWeight.w900
@@ -55,6 +56,13 @@ class DaftarChatScreen extends StatelessWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
+                                          Text(sesi.barang.nama,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: UINColors.muted)),
+                                          const SizedBox(height: 3),
                                           Text(last,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -83,12 +91,16 @@ class RoomChatScreen extends StatefulWidget {
   final String currentUserName;
   final String currentUserEmail;
   final VoidCallback onStatusChanged;
+  final Future<SesiChat?> Function(String text)? onSendMessage;
+  final Future<SesiChat?> Function()? onRefresh;
   const RoomChatScreen(
       {super.key,
       required this.sesi,
       required this.currentUserName,
       required this.currentUserEmail,
-      required this.onStatusChanged});
+      required this.onStatusChanged,
+      this.onSendMessage,
+      this.onRefresh});
   @override
   State<RoomChatScreen> createState() => _RoomChatScreenState();
 }
@@ -96,17 +108,59 @@ class RoomChatScreen extends StatefulWidget {
 class _RoomChatScreenState extends State<RoomChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  late SesiChat _sesi = widget.sesi;
+  Timer? _refreshTimer;
+  bool _sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.onRefresh != null) {
+      _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        unawaited(_refreshFromServer());
+      });
+    }
+  }
+
+  Future<void> _refreshFromServer() async {
+    try {
+      final refreshed = await widget.onRefresh?.call();
+      if (refreshed != null && mounted) setState(() => _sesi = refreshed);
+    } catch (_) {
+      // Room tetap menampilkan pesan terakhir yang berhasil dimuat.
+    }
+  }
+
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _kirimPesan() {
+  Future<void> _kirimPesan() async {
     final text = _inputController.text.trim();
-    if (text.isEmpty) return;
-    setState(() => widget.sesi.pesanList.add(PesanChat(
+    if (text.isEmpty || _sending) return;
+    if (widget.onSendMessage != null) {
+      setState(() => _sending = true);
+      try {
+        final refreshed = await widget.onSendMessage!(text);
+        if (!mounted) return;
+        if (refreshed != null) setState(() => _sesi = refreshed);
+        _inputController.clear();
+        _scrollToLatest();
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))));
+        }
+      } finally {
+        if (mounted) setState(() => _sending = false);
+      }
+      return;
+    }
+    setState(() => _sesi.pesanList.add(PesanChat(
         pengirim: widget.currentUserName,
         pengirimEmail: widget.currentUserEmail,
         teks: text,
@@ -114,6 +168,10 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
         isMe: true)));
     widget.onStatusChanged();
     _inputController.clear();
+    _scrollToLatest();
+  }
+
+  void _scrollToLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(_scrollController.position.maxScrollExtent,
@@ -135,8 +193,8 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                       child: const Text('Batal')),
                   FilledButton(
                       onPressed: () {
-                        setState(() =>
-                            widget.sesi.barang.status = StatusBarang.selesai);
+                        setState(
+                            () => _sesi.barang.status = StatusBarang.selesai);
                         widget.onStatusChanged();
                         Navigator.pop(dialogContext);
                       },
@@ -149,21 +207,22 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       appBar: AppBar(
           title:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.sesi.barang.nama, style: const TextStyle(fontSize: 16)),
+            Text(_sesi.peerName ?? _sesi.barang.pelapor,
+                style: const TextStyle(fontSize: 16)),
             Row(children: [
-              Text('${widget.sesi.barang.pelapor} • ',
+              Text('${_sesi.barang.nama} • ',
                   style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.normal,
                       color: UINColors.muted)),
               PresenceLabel(
-                  isOnline: widget.sesi.isOnline,
-                  lastSeen: widget.sesi.lastSeen,
+                  isOnline: _sesi.isOnline,
+                  lastSeen: _sesi.lastSeen,
                   compact: true)
             ])
           ]),
           actions: [
-            if (widget.sesi.barang.status != StatusBarang.selesai)
+            if (_sesi.barang.status != StatusBarang.selesai)
               IconButton(
                   onPressed: _selesaikanKlaim,
                   tooltip: 'Tandai selesai',
@@ -175,9 +234,9 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
             child: ListView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-                itemCount: widget.sesi.pesanList.length,
+                itemCount: _sesi.pesanList.length,
                 itemBuilder: (_, index) {
-                  final message = widget.sesi.pesanList[index];
+                  final message = _sesi.pesanList[index];
                   return Align(
                       alignment: message.isMe
                           ? Alignment.centerRight
@@ -237,7 +296,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                           border: InputBorder.none))),
               const SizedBox(width: 8),
               IconButton.filled(
-                  onPressed: _kirimPesan,
+                  onPressed: _sending ? null : _kirimPesan,
                   style: IconButton.styleFrom(
                       backgroundColor: UINColors.primary,
                       foregroundColor: Colors.white),

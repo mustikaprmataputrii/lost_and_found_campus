@@ -116,10 +116,14 @@ Tabel yang digunakan:
 - `users`: data mahasiswa yang login.
 - `reports`: data laporan barang dan foto.
 - `chats`: sesi percakapan klaim.
-- `messages`: pesan dalam sesi chat.
-- `chat_members`: anggota setiap sesi chat.
+- `messages`: pesan disimpan satu per satu di server agar snapshot lokal tidak dapat menghapus pesan akun lain.
+- `chat_members`: anggota sesi chat, waktu bergabung, dan waktu terakhir membaca.
 - `user_presence`: status online dan waktu terakhir dilihat.
 - `notifications`: notifikasi pengguna.
+
+Chat dibuat per laporan dan pasangan pengguna. Endpoint khusus membuat sesi,
+mengirim pesan, serta menandai pesan telah dibaca. Laporan tetap disinkronkan
+melalui endpoint sync; endpoint tersebut tidak menulis ulang isi percakapan.
 
 ## Konfigurasi koneksi backend
 
@@ -164,6 +168,10 @@ Endpoint yang tersedia:
 | POST | `?path=auth/login` | Validasi email kampus dan menyimpan pengguna |
 | POST | `?path=auth/admin-login` | Verifikasi admin dan menghasilkan token sesi |
 | POST | `?path=presence` | Memperbarui status online atau last seen |
+| POST | `?path=chats/start` | Memulai atau membuka percakapan untuk laporan dan pengguna |
+| POST | `?path=messages/send` | Menyimpan pesan dan membuat notifikasi penerima |
+| POST | `?path=chats/read` | Memperbarui waktu dibaca serta unread count akun |
+| POST | `?path=notifications/read-all` | Menandai notifikasi akun telah dibaca |
 | GET | `?path=sync&email=...` | Mengambil laporan, chat, dan notifikasi |
 | GET | `?path=admin/sync` | Mengambil seluruh data untuk dashboard admin dengan header token |
 | POST | `?path=sync` | Menyimpan sinkronisasi data aplikasi |

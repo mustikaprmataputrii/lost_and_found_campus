@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS messages (
   pengirim VARCHAR(120) NOT NULL,
   pengirim_email VARCHAR(120) NULL,
   teks TEXT NOT NULL,
-  waktu DATETIME NOT NULL,
+  waktu DATETIME(6) NOT NULL,
   is_me TINYINT(1) NOT NULL DEFAULT 0,
   INDEX idx_messages_chat_time (chat_id, waktu),
   CONSTRAINT fk_messages_chat
@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS chat_members (
   chat_id VARCHAR(120) NOT NULL,
   email VARCHAR(120) NOT NULL,
+  last_read_at DATETIME(6) NULL,
   joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (chat_id, email),
   INDEX idx_chat_members_email (email),
@@ -93,12 +94,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   notification_key CHAR(64) NOT NULL UNIQUE,
   email VARCHAR(120) NOT NULL,
+  chat_id VARCHAR(120) NULL,
   title VARCHAR(160) NOT NULL,
   message TEXT NOT NULL,
-  waktu DATETIME NOT NULL,
+  waktu DATETIME(6) NOT NULL,
   is_read TINYINT(1) NOT NULL DEFAULT 0,
   INDEX idx_notifications_email_time (email, waktu),
   CONSTRAINT fk_notifications_user
     FOREIGN KEY (email) REFERENCES users(email)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_notifications_chat
+    FOREIGN KEY (chat_id) REFERENCES chats(id)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;

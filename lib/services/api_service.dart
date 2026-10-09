@@ -91,6 +91,61 @@ class ApiService {
     await _decode(response);
   }
 
+  Future<String> startChat({
+    required String email,
+    required String reportId,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('chats/start'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'reportId': reportId}),
+        )
+        .timeout(const Duration(seconds: 8));
+    final decoded = await _decode(response);
+    return '${(decoded['data'] as Map)['chatId']}';
+  }
+
+  Future<void> sendMessage({
+    required String email,
+    required String chatId,
+    required String text,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('messages/send'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'chatId': chatId, 'text': text}),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
+  Future<void> markChatRead({
+    required String email,
+    required String chatId,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('chats/read'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'chatId': chatId}),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
+  Future<void> markNotificationsRead({required String email}) async {
+    final response = await _client
+        .post(
+          _uri('notifications/read-all'),
+          headers: _headers,
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
   Future<void> deleteReport({
     required String email,
     required String reportId,
