@@ -201,11 +201,49 @@ class ApiService {
         .map((item) =>
             NotifikasiItem.fromMap(Map<dynamic, dynamic>.from(item as Map)))
         .toList();
+    final users = (data['users'] as List? ?? [])
+        .map((item) => AdminUser.fromMap(Map<dynamic, dynamic>.from(item as Map)))
+        .toList();
     return LocalDataSnapshot(
       reports: reports,
       chats: chats,
       notifications: notifications,
+      users: users,
     );
+  }
+
+  Future<void> updateAdminUser({
+    required String token,
+    required String currentEmail,
+    required String nim,
+    required String email,
+    required String nama,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('admin/users/update'),
+          headers: {..._headers, 'X-Admin-Token': token},
+          body: jsonEncode({
+            'currentEmail': currentEmail,
+            'nim': nim,
+            'email': email,
+            'nama': nama,
+          }),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
+  Future<void> deleteAdminUser({
+    required String token,
+    required String email,
+  }) async {
+    final response = await _client.post(
+      _uri('admin/users/delete'),
+      headers: {..._headers, 'X-Admin-Token': token},
+      body: jsonEncode({'email': email}),
+    ).timeout(const Duration(seconds: 8));
+    await _decode(response);
   }
 
   Future<void> saveAll({

@@ -6,7 +6,7 @@ $config = require __DIR__ . '/../../config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: ' . $config['cors_origin']);
-header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Allow-Headers: Content-Type, Accept, X-Admin-Token');
 header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -410,6 +410,72 @@ if ($method === 'POST' && $path === 'auth/admin-login') {
     ]);
 }
 
+if ($method === 'POST' && in_array($path, ['admin/users/update', 'admin/users/delete'], true)) {
+    $admin = $config['admin'];
+    $adminToken = (string) ($_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '');
+    if (!adminTokenIsValid($adminToken, $admin['email'], $admin['secret'])) {
+        respond(['ok' => false, 'error' => 'Sesi admin tidak valid atau sudah kedaluwarsa.'], 401);
+    }
+
+    if ($path === 'admin/users/update') {
+        $currentEmail = strtolower(requireString($body, 'currentEmail'));
+        $email = strtolower(requireString($body, 'email'));
+        $nim = trim(requireString($body, 'nim'));
+        $nama = trim(requireString($body, 'nama'));
+        if (!campusEmailIsValid($email) || $nim === '' || $nama === '' || explode('@', $email)[0] !== $nim) {
+            respond(['ok' => false, 'error' => 'Nama wajib diisi dan email harus sesuai dengan NIM.'], 422);
+        }
+
+        try {
+            $db->begin_transaction();
+            $exists = $db->prepare('SELECT 1 FROM users WHERE email = ? LIMIT 1');
+            $exists->bind_param('s', $currentEmail);
+            $exists->execute();
+            $accountExists = $exists->get_result()->num_rows > 0;
+            $exists->close();
+            if (!$accountExists) {
+                $db->rollback();
+                respond(['ok' => false, 'error' => 'Akun tidak ditemukan.'], 404);
+            }
+            $updateUser = $db->prepare(
+                'UPDATE users SET nim = ?, email = ?, nama = ? WHERE email = ?',
+            );
+            $updateUser->bind_param('ssss', $nim, $email, $nama, $currentEmail);
+            $updateUser->execute();
+            $updateUser->close();
+            $updateMessages = $db->prepare(
+                'UPDATE messages SET pengirim_email = ?, pengirim = ? WHERE pengirim_email = ?',
+            );
+            $updateMessages->bind_param('sss', $email, $nama, $currentEmail);
+            $updateMessages->execute();
+            $updateMessages->close();
+            $db->commit();
+            respond(['ok' => true, 'data' => ['updated' => true]]);
+        } catch (Throwable $error) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Perubahan akun gagal. Pastikan NIM dan email belum digunakan akun lain.'], 409);
+        }
+    }
+
+    $email = strtolower(requireString($body, 'email'));
+    if (!campusEmailIsValid($email)) {
+        respond(['ok' => false, 'error' => 'Email kampus tidak valid.'], 422);
+    }
+    try {
+        $deleteUser = $db->prepare('DELETE FROM users WHERE email = ?');
+        $deleteUser->bind_param('s', $email);
+        $deleteUser->execute();
+        $deleted = $deleteUser->affected_rows > 0;
+        $deleteUser->close();
+        if (!$deleted) {
+            respond(['ok' => false, 'error' => 'Akun tidak ditemukan.'], 404);
+        }
+        respond(['ok' => true, 'data' => ['deleted' => true]]);
+    } catch (Throwable $error) {
+        respond(['ok' => false, 'error' => 'Akun gagal dihapus.'], 409);
+    }
+}
+
 if ($method === 'DELETE' && $path === 'reports') {
     $email = strtolower(trim((string) ($_GET['email'] ?? '')));
     $reportId = trim((string) ($_GET['id'] ?? ''));
@@ -485,6 +551,29 @@ if ($method === 'GET') {
         $row['ownerEmail'] = strtolower((string) $row['user_email']);
         unset($row['user_email']);
         $reports[] = $row;
+    }
+
+    $users = [];
+    if ($isAdminRequest) {
+        $userResult = $db->query(
+            'SELECT u.nim, u.email, u.nama, u.created_at,
+                    CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                         THEN 1 ELSE 0 END AS is_online,
+                    p.last_seen
+             FROM users u
+             LEFT JOIN user_presence p ON p.email = u.email
+             ORDER BY u.created_at DESC',
+        );
+        while ($row = $userResult->fetch_assoc()) {
+            $users[] = [
+                'nim' => $row['nim'],
+                'email' => $row['email'],
+                'nama' => $row['nama'],
+                'createdAt' => isoDate($row['created_at']),
+                'isOnline' => (bool) $row['is_online'],
+                'lastSeen' => isoDate($row['last_seen']),
+            ];
+        }
     }
 
     $chats = [];
@@ -628,6 +717,7 @@ if ($method === 'GET') {
             'reports' => $reports,
             'chats' => $chats,
             'notifications' => $notifications,
+            'users' => $users,
         ],
     ]);
 }

@@ -83,13 +83,14 @@ def create_diagrams():
         (1300, 180, 180, 90, "Laporan", "#FFFFFF"),
         (1300, 300, 180, 90, "Chat", "#FFFFFF"),
         (1300, 420, 180, 90, "Notifikasi", "#FFFFFF"),
+        (1300, 530, 180, 90, "Pengguna", "#FFFFFF"),
     ]
     nav_arrows = [
         (340, 275, 500, 215), (340, 485, 500, 445),
         (800, 215, 980, 115), (800, 215, 980, 225),
         (800, 215, 980, 335), (800, 215, 980, 445),
         (800, 445, 1300, 225), (800, 445, 1300, 345),
-        (800, 445, 1300, 465),
+        (800, 445, 1300, 465), (800, 445, 1300, 575),
     ]
     make_diagram(DOCS / "struktur_navigasi.png",
                  "Struktur Navigasi Aplikasi", nav_boxes, nav_arrows,
@@ -392,7 +393,7 @@ def build_report():
         "Menyediakan media pelaporan barang hilang dan ditemukan di lingkungan UIN Malang.",
         "Membantu mahasiswa menjelajah laporan berdasarkan nama, deskripsi, jenis, dan lokasi.",
         "Menyediakan chat dan notifikasi untuk mendukung proses klaim.",
-        "Menyediakan dashboard admin untuk memantau seluruh laporan, chat, dan notifikasi.",
+        "Menyediakan dashboard admin untuk memantau laporan, chat, notifikasi, dan akun pengguna.",
         "Menerapkan aplikasi Flutter secara terstruktur dengan pemisahan UI, logika, data, dan layanan.",
     ])
     doc.add_heading("1.3 Sasaran Pengguna", level=2)
@@ -400,7 +401,7 @@ def build_report():
         ("Mahasiswa / civitas", "Memiliki NIM dan email resmi kampus",
          "Membuat laporan, mencari barang, chat, dan melihat notifikasi"),
         ("Admin", "Pengelola aplikasi",
-         "Melihat seluruh data laporan, chat, notifikasi, dan memantau aktivitas"),
+         "Melihat laporan, chat, notifikasi, pengguna, dan mengelola akun"),
     ], widths=[4, 5, 7], font_size=8)
     doc.add_page_break()
 
@@ -418,6 +419,10 @@ def build_report():
         ("F-09", "Melihat seluruh data melalui dashboard admin", "Admin"),
         ("F-10", "Melihat laporan dari semua akun dan menghapus laporan milik sendiri", "Mahasiswa"),
         ("F-11", "Sinkronisasi laporan, chat, dan notifikasi berkala dari backend", "Mahasiswa"),
+        ("F-12", "Melihat jumlah laporan selesai dan daftar laporan lengkap", "Admin"),
+        ("F-13", "Melihat nama, email, NIM, dan status aktivitas pengguna", "Admin"),
+        ("F-14", "Mengubah identitas atau menghapus akun pengguna", "Admin"),
+        ("F-15", "Layout web mengikuti lebar desktop dan menyesuaikan tablet/ponsel", "Semua pengguna"),
     ], widths=[2, 10, 3], font_size=7)
     doc.add_heading("2.2 Kebutuhan Nonfungsional", level=2)
     add_bullets(doc, [
@@ -438,9 +443,10 @@ def build_report():
         ("UC-04", "Membuat laporan", "Pengguna mengisi nama barang, lokasi, detail, kontak, jenis, dan foto.", "Laporan divalidasi dan tersimpan"),
         ("UC-05", "Chat klaim", "Pengguna membuka detail barang dan mengirim pesan.", "Pesan masuk ke sesi chat"),
         ("UC-06", "Notifikasi", "Pesan baru memicu popup dan badge jumlah.", "Pengguna mengetahui aktivitas baru"),
-        ("UC-07", "Monitoring admin", "Admin membuka tab laporan, chat, atau notifikasi.", "Admin melihat seluruh data"),
+        ("UC-07", "Monitoring admin", "Admin membuka tab laporan, chat, notifikasi, atau pengguna.", "Admin melihat ringkasan serta data sesuai tab"),
         ("UC-08", "Interaksi lintas akun", "Pengguna membuka laporan milik pengguna lain dan memulai percakapan.", "Anggota melihat pesan dan notifikasi dari server bersama"),
         ("UC-09", "Hapus laporan", "Pemilik memilih hapus pada detail laporan dan mengonfirmasi.", "Laporan terhapus untuk semua akun; akun lain ditolak"),
+        ("UC-10", "Kelola akun pengguna", "Admin meninjau identitas dan status pengguna, lalu memilih ubah atau hapus.", "Akun diperbarui atau dihapus dengan laporan tetap dipertahankan"),
     ], widths=[2, 3, 8, 3], font_size=7)
     doc.add_heading("2.5 Struktur Navigasi Aplikasi", level=2)
     doc.add_picture(str(DOCS / "struktur_navigasi.png"), width=Cm(16))
@@ -467,19 +473,22 @@ def build_report():
         ("Lapor", "Form nama, lokasi, detail, kontak, jenis - kamera/galeri - detail - hapus khusus pemilik"),
         ("Chat", "Daftar chat anggota - preview pesan - badge unread - online/last seen backend - room chat"),
         ("Profil", "Logo - identitas - status verifikasi - waktu sesi - tombol logout"),
-        ("Admin", "AppBar admin - kartu statistik - tab Laporan, Chat, Notifikasi - detail data"),
+        ("Admin", "AppBar admin - statistik laporan/selesai/pengguna/chat - tab Laporan, Chat, Notifikasi, Pengguna - aksi ubah/hapus akun"),
     ], widths=[4, 13], font_size=8)
     doc.add_heading("2.8 Purwarupa Antarmuka", level=2)
     doc.add_paragraph(
         "Purwarupa dikembangkan dengan nuansa UIN Malang melalui warna hijau tua, hijau "
         "utama, emas, dan sand. Logo UIN digunakan sebagai identitas visual pada login, "
         "dashboard, AppBar, dan halaman admin. Komponen Material 3 dipakai agar tampilan "
-        "konsisten pada perangkat berbeda."
+        "konsisten pada perangkat berbeda. Layout web menggunakan lebar yang tersedia "
+        "pada desktop dan menyesuaikan pada tablet maupun ponsel."
     )
     add_placeholder(doc, "Purwarupa login dan dashboard",
                     "Tempel screenshot halaman login dan dashboard mahasiswa dari Chrome/Android.", 2.0)
     add_placeholder(doc, "Purwarupa laporan dan chat",
                     "Tempel screenshot form laporan, chat, badge pesan, serta status online.", 2.0)
+    add_placeholder(doc, "Layout web responsif",
+                    "Tempel screenshot desktop lebar dan tampilan ponsel/tablet yang menunjukkan layout mengikuti viewport.", 2.0)
     doc.add_page_break()
 
     doc.add_heading("BAB III - TAHAP 3: IMPLEMENTASI APLIKASI DENGAN FLUTTER", level=1)
@@ -514,7 +523,8 @@ backend/
         "Login mahasiswa berhasil menuju DashboardScreen lalu MainNavigationScreen.",
         "MainNavigationScreen menggunakan NavigationBar untuk Jelajah, Lapor, Chat, dan Profil.",
         "DetailBarangScreen membuka RoomChatScreen untuk proses klaim.",
-        "Login admin berhasil menuju AdminDashboardScreen yang memiliki tab Laporan, Chat, dan Notifikasi.",
+        "Login admin berhasil menuju AdminDashboardScreen dengan tab Laporan, Chat, Notifikasi, dan Pengguna.",
+        "ResponsivePage membuat konten memanfaatkan ruang layar desktop yang lebar dan menyesuaikan pada tablet/ponsel.",
         "Logout membersihkan session dan mengembalikan pengguna ke LoginScreen.",
     ])
     doc.add_heading("3.4 Pengelolaan Masukan dan Validasi", level=2)
@@ -535,7 +545,9 @@ backend/
         "mana pun dikirim ke server dan ditampilkan pada semua akun. Percakapan dibuat per "
         "laporan dan pasangan akun; pesan ditambahkan sebagai record baru melalui endpoint "
         "khusus, sedangkan snapshot sync tidak pernah menulis ulang pesan. Endpoint admin "
-        "memakai token sesi untuk memuat seluruh data."
+        "memakai token sesi untuk memuat seluruh data termasuk daftar pengguna. Admin dapat "
+        "mengubah NIM, email kampus, dan nama, atau menghapus akun. Penghapusan akun tidak "
+        "menghapus laporan; identitas pemilik laporan dilepas sesuai relasi database."
     )
     add_code(doc, """POST /api/index.php?path=auth/login
 POST /api/index.php?path=auth/admin-login
@@ -552,6 +564,9 @@ DELETE /api/index.php?path=reports&email=...&id=...""")
     add_bullets(doc, [
         "Login mahasiswa membatasi domain email kampus dan menolak email dengan nama/NIM berbeda dari catatan database.",
         "Login admin dan dashboard monitoring terpisah dari dashboard mahasiswa.",
+        "Dashboard admin menampilkan jumlah laporan, laporan selesai, pengguna, dan percakapan; setiap laporan dapat dibuka untuk melihat detail.",
+        "Tab Pengguna menampilkan nama, email, NIM, online/last seen, serta tindakan ubah dan hapus akun.",
+        "Layout web responsif memanfaatkan lebar desktop dan menyesuaikan tablet/ponsel.",
         "Laporan barang hilang/ditemukan dengan status dan detail.",
         "Upload foto kamera atau galeri melalui image_picker.",
         "Chat klaim per laporan dan pasangan akun dengan pesan append-only pada database bersama.",
@@ -571,10 +586,10 @@ DELETE /api/index.php?path=reports&email=...&id=...""")
         ("Proteksi pesan", "LULUS", "Sinkronisasi snapshot lama tidak menghapus pesan tersimpan"),
         ("Tandai sudah dibaca", "LULUS", "Unread count kembali menjadi nol dan notifikasi chat ditandai dibaca"),
         ("Presence", "LULUS", "Heartbeat UTC menunjukkan status Online dan waktu last seen"),
-        ("API admin sync", "LULUS", "Mengembalikan seluruh laporan, chat, dan notifikasi"),
+        ("API admin sync", "LULUS", "Mengembalikan seluruh laporan, chat, notifikasi, dan daftar pengguna"),
         ("Kunci identitas email", "LULUS", "Identitas berbeda ditolak HTTP 409; identitas terdaftar diterima"),
         ("Batas penghapusan laporan", "LULUS", "Akun selain pemilik ditolak HTTP 403"),
-        ("API sync pengguna", "LULUS", "Database aktif; pemeriksaan mengembalikan 3 laporan, 1 chat, dan 2 notifikasi"),
+        ("API sync pengguna", "LULUS", "Database aktif; pemeriksaan data bersama berhasil"),
         ("Flutter build web", "LULUS", "Build Web berhasil dikompilasi"),
         ("Git", "LULUS", "Commit tersedia pada branch main"),
     ], widths=[5, 3, 9], font_size=8)
@@ -606,10 +621,12 @@ DELETE /api/index.php?path=reports&email=...&id=...""")
         ("5", "Kamera perangkat", "Ambil screenshot kamera langsung pada Android/iOS; Chrome laptop dapat membuka file picker."),
         ("6", "Chat", "Tampilkan daftar chat, badge angka, room chat, dan Online/last seen."),
         ("7", "Notifikasi", "Tampilkan popup pesan masuk dan halaman pemberitahuan."),
-        ("8", "Dashboard admin", "Login admin lalu screenshot statistik dan tab Laporan/Chat/Notifikasi."),
+        ("8", "Dashboard admin", "Login admin lalu screenshot statistik dan tab Laporan/Chat/Notifikasi/Pengguna."),
         ("9", "Database", "Buka phpMyAdmin database lost_and_found_campus dan screenshot tabel users, reports, chats, chat_members, messages, user_presence, notifications."),
         ("10", "Testing", "Screenshot terminal hasil flutter test, analyze, build web, dan PHP lint."),
         ("11", "GitHub", "Buka repository GitHub dan screenshot daftar file serta commit terbaru."),
+        ("12", "Pengelolaan pengguna admin", "Tampilkan tab Pengguna dengan nama, email, NIM, status aktivitas, dan menu ubah/hapus."),
+        ("13", "Layout web responsif", "Tampilkan aplikasi pada desktop lebar dan ponsel/tablet; pastikan konten mengikuti ukuran viewport."),
     ], widths=[1.2, 6.5, 9.3], font_size=7)
     doc.add_heading("Catatan Bukti Kamera", level=2)
     doc.add_paragraph(
@@ -638,7 +655,10 @@ DELETE /api/index.php?path=reports&email=...&id=...""")
         "terdaftar. Laporan tersedia lintas akun dari database bersama; chat, pesan, notifikasi, "
         "badge, serta status online/last seen dikelola backend. Pemilik dapat menghapus "
         "laporannya dan penghapusan berlaku bagi semua akun. Fitur ini melengkapi pencarian, "
-        "upload foto, penyimpanan data, dan monitoring admin sebagai MVP."
+        "upload foto, penyimpanan data, dan monitoring admin sebagai MVP. Admin dapat "
+        "memantau jumlah dan detail laporan, termasuk jumlah laporan selesai, serta melihat "
+        "dan mengelola akun pengguna. Layout web mengikuti ruang desktop dan tetap responsif "
+        "pada tablet maupun ponsel."
     )
     doc.add_heading("Pengembangan Lanjutan", level=2)
     doc.add_paragraph(

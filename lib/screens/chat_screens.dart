@@ -8,82 +8,90 @@ class DaftarChatScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Chat klaim')),
-      body: daftarSesi.isEmpty
-          ? const Center(
-              child: Text('Belum ada percakapan aktif.',
-                  style: TextStyle(color: UINColors.muted)))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              children: [
-                  const Text('Percakapanmu',
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: UINColors.deep)),
-                  const SizedBox(height: 5),
-                  const Text('Komunikasikan proses pengembalian dengan aman.',
-                      style: TextStyle(color: UINColors.muted)),
-                  const SizedBox(height: 18),
-                  ...daftarSesi.map((sesi) {
-                    final last = sesi.pesanList.isEmpty
-                        ? 'Belum ada pesan'
-                        : sesi.pesanList.last.teks;
-                    return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Card(
-                            child: ListTile(
-                                onTap: () => onSesiTap(sesi),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                leading: Badge(
-                                    isLabelVisible: sesi.unreadCount > 0,
-                                    label: Text('${sesi.unreadCount}'),
-                                    backgroundColor: UINColors.coral,
-                                    child: const CircleAvatar(
-                                        backgroundColor: UINColors.mint,
-                                        child: Icon(Icons.chat_bubble_outline,
-                                            color: UINColors.primary))),
-                                title: Text(
-                                    sesi.peerName ?? sesi.barang.pelapor,
-                                    style: TextStyle(
-                                        fontWeight: sesi.unreadCount > 0
-                                            ? FontWeight.w900
-                                            : FontWeight.w700,
-                                        color: UINColors.deep)),
-                                subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 5),
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(sesi.barang.nama,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: UINColors.muted)),
-                                          const SizedBox(height: 3),
-                                          Text(last,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                  color: sesi.unreadCount > 0
-                                                      ? UINColors.ink
-                                                      : UINColors.muted,
-                                                  fontWeight:
-                                                      sesi.unreadCount > 0
-                                                          ? FontWeight.w700
-                                                          : FontWeight.normal)),
-                                          const SizedBox(height: 5),
-                                          PresenceLabel(
-                                              isOnline: sesi.isOnline,
-                                              lastSeen: sesi.lastSeen,
-                                              compact: true)
-                                        ])),
-                                trailing: const Icon(Icons.chevron_right,
-                                    color: UINColors.muted))));
-                  })
-                ]));
+      body: ResponsivePage(
+        maxWidth: 1600,
+          child: daftarSesi.isEmpty
+              ? const Center(
+                  child: Text('Belum ada percakapan aktif.',
+                      style: TextStyle(color: UINColors.muted)))
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  children: [
+                      const Text('Percakapanmu',
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: UINColors.deep)),
+                      const SizedBox(height: 5),
+                      const Text(
+                          'Komunikasikan proses pengembalian dengan aman.',
+                          style: TextStyle(color: UINColors.muted)),
+                      const SizedBox(height: 18),
+                      ...daftarSesi.map((sesi) {
+                        final last = sesi.pesanList.isEmpty
+                            ? 'Belum ada pesan'
+                            : sesi.pesanList.last.teks;
+                        return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Card(
+                                child: ListTile(
+                                    onTap: () => onSesiTap(sesi),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 8),
+                                    leading: Badge(
+                                        isLabelVisible: sesi.unreadCount > 0,
+                                        label: Text('${sesi.unreadCount}'),
+                                        backgroundColor: UINColors.coral,
+                                        child: const CircleAvatar(
+                                            backgroundColor: UINColors.mint,
+                                            child: Icon(
+                                                Icons.chat_bubble_outline,
+                                                color: UINColors.primary))),
+                                    title: Text(
+                                        sesi.peerName ?? sesi.barang.pelapor,
+                                        style: TextStyle(
+                                            fontWeight: sesi.unreadCount > 0
+                                                ? FontWeight.w900
+                                                : FontWeight.w700,
+                                            color: UINColors.deep)),
+                                    subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 5),
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(sesi.barang.nama,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: UINColors.muted)),
+                                              const SizedBox(height: 3),
+                                              Text(last,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      color:
+                                                          sesi.unreadCount > 0
+                                                              ? UINColors.ink
+                                                              : UINColors.muted,
+                                                      fontWeight:
+                                                          sesi.unreadCount > 0
+                                                              ? FontWeight.w700
+                                                              : FontWeight
+                                                                  .normal)),
+                                              const SizedBox(height: 5),
+                                              PresenceLabel(
+                                                  isOnline: sesi.isOnline,
+                                                  lastSeen: sesi.lastSeen,
+                                                  compact: true)
+                                            ])),
+                                    trailing: const Icon(Icons.chevron_right,
+                                        color: UINColors.muted))));
+                      })
+                    ])));
 }
 
 class RoomChatScreen extends StatefulWidget {
@@ -229,78 +237,80 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   icon: const Icon(Icons.check_circle_outline)),
             const SizedBox(width: 6)
           ]),
-      body: Column(children: [
-        Expanded(
-            child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-                itemCount: _sesi.pesanList.length,
-                itemBuilder: (_, index) {
-                  final message = _sesi.pesanList[index];
-                  return Align(
-                      alignment: message.isMe
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
-                          constraints: const BoxConstraints(maxWidth: 310),
-                          decoration: BoxDecoration(
-                              color: message.isMe
-                                  ? UINColors.primary
-                                  : Colors.white,
-                              borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(18),
-                                  topRight: const Radius.circular(18),
-                                  bottomLeft:
-                                      Radius.circular(message.isMe ? 18 : 4),
-                                  bottomRight:
-                                      Radius.circular(message.isMe ? 4 : 18))),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (!message.isMe)
-                                  Text(message.pengirim,
-                                      style: const TextStyle(
-                                          fontSize: 10,
-                                          color: UINColors.primary,
-                                          fontWeight: FontWeight.w800)),
-                                Text(message.teks,
-                                    style: TextStyle(
-                                        color: message.isMe
-                                            ? Colors.white
-                                            : UINColors.ink,
-                                        height: 1.35)),
-                                const SizedBox(height: 4),
-                                Text(_formatJam(message.waktu),
-                                    style: TextStyle(
-                                        color: message.isMe
-                                            ? Colors.white70
-                                            : UINColors.muted,
-                                        fontSize: 9))
-                              ])));
-                })),
-        Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            color: Colors.white,
-            child: Row(children: [
-              Expanded(
-                  child: TextField(
-                      controller: _inputController,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _kirimPesan(),
-                      decoration: const InputDecoration(
-                          hintText: 'Tulis pesan...',
-                          filled: true,
-                          fillColor: UINColors.sand,
-                          border: InputBorder.none))),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                  onPressed: _sending ? null : _kirimPesan,
-                  style: IconButton.styleFrom(
-                      backgroundColor: UINColors.primary,
-                      foregroundColor: Colors.white),
-                  icon: const Icon(Icons.send_rounded))
-            ]))
-      ]));
+      body: ResponsivePage(
+          maxWidth: 1600,
+          child: Column(children: [
+            Expanded(
+                child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+                    itemCount: _sesi.pesanList.length,
+                    itemBuilder: (_, index) {
+                      final message = _sesi.pesanList[index];
+                      return Align(
+                          alignment: message.isMe
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
+                              constraints: const BoxConstraints(maxWidth: 310),
+                              decoration: BoxDecoration(
+                                  color: message.isMe
+                                      ? UINColors.primary
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(18),
+                                      topRight: const Radius.circular(18),
+                                      bottomLeft: Radius.circular(
+                                          message.isMe ? 18 : 4),
+                                      bottomRight: Radius.circular(
+                                          message.isMe ? 4 : 18))),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (!message.isMe)
+                                      Text(message.pengirim,
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: UINColors.primary,
+                                              fontWeight: FontWeight.w800)),
+                                    Text(message.teks,
+                                        style: TextStyle(
+                                            color: message.isMe
+                                                ? Colors.white
+                                                : UINColors.ink,
+                                            height: 1.35)),
+                                    const SizedBox(height: 4),
+                                    Text(_formatJam(message.waktu),
+                                        style: TextStyle(
+                                            color: message.isMe
+                                                ? Colors.white70
+                                                : UINColors.muted,
+                                            fontSize: 9))
+                                  ])));
+                    })),
+            Container(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                color: Colors.white,
+                child: Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: _inputController,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _kirimPesan(),
+                          decoration: const InputDecoration(
+                              hintText: 'Tulis pesan...',
+                              filled: true,
+                              fillColor: UINColors.sand,
+                              border: InputBorder.none))),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                      onPressed: _sending ? null : _kirimPesan,
+                      style: IconButton.styleFrom(
+                          backgroundColor: UINColors.primary,
+                          foregroundColor: Colors.white),
+                      icon: const Icon(Icons.send_rounded))
+                ]))
+          ])));
 }

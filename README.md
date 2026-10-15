@@ -181,6 +181,21 @@ Dokumentasi backend yang lebih spesifik tersedia di [backend/README.md](backend/
 
 ## Menjalankan aplikasi Flutter
 
+### Demo cepat melalui VS Code (Windows)
+
+1. Buka seluruh folder project ini di VS Code.
+2. Jalankan MySQL dari Laragon dan pastikan database `lost_and_found_campus` sudah tersedia.
+3. Pasang ekstensi **Flutter** di VS Code jika belum ada.
+4. Buka **Run and Debug**, pilih **TEMU - Demo Web di Chrome**, lalu tekan **F5**.
+
+Task VS Code akan memeriksa API. Jika API belum aktif, task mencoba menjalankan PHP
+dari `PATH` atau instalasi Laragon standar pada `D:\laragon\bin\php`; setelah backend
+dan database terhubung, Flutter dibuka di Chrome. Jika PHP Laragon berada di lokasi lain,
+tambahkan `php.exe` ke `PATH` atau sesuaikan pencarian PHP di `.vscode/tasks.json`.
+
+Untuk pertama kali, jalankan `flutter pub get` dari terminal project jika VS Code meminta
+dependency Flutter disiapkan.
+
 ### Web/Chrome
 
 API default Web menggunakan:
@@ -307,7 +322,11 @@ Project telah memenuhi fungsi utama MVP:
 - Penyimpanan lokal Hive tersedia sebagai buffer perangkat tanpa mencampurkan data antar akun.
 - Identitas email, NIM, dan nama dikunci di database; perubahan identitas pada email yang sama ditolak.
 - Laporan milik akun lain, anggota chat, notifikasi pesan, dan presence dibaca dari database bersama.
-- Build Web dan test Flutter telah divalidasi.
+- Flutter analyze terakhir: lulus (`No issues found`).
+- PHP lint untuk `backend/config.php` dan `backend/public/api/index.php`: lulus.
+- Terdapat 10 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, dan smoke test. Eksekusi ulang pada 15 Oktober 2026 lulus (`All tests passed`).
+- Build Web pernah berhasil; ulangi setelah perubahan final.
+- APK belum tersedia. Build release sudah dicoba ulang, tetapi Android SDK gagal menemukan/memasang NDK `28.2.13676358` (`Package ndk not found`). Lihat [laporan kemajuan Tahap 4–5](docs/Laporan_Tahap_4_dan_5_TEMU_UIN_Malang.docx) untuk matriks uji, bukti perbaikan sebelum/sesudah, formulir evaluasi pengguna, dan checklist finalisasi.
 
 ## Batasan saat ini
 
@@ -315,6 +334,7 @@ Project telah memenuhi fungsi utama MVP:
 - Chat saat ini melakukan sinkronisasi melalui API ketika terjadi perubahan; push notification/WebSocket realtime belum diterapkan.
 - API menggunakan CORS terbuka untuk kebutuhan development lokal. Pada deployment produksi, CORS harus dibatasi ke domain aplikasi.
 - Backend Laragon ditujukan untuk development/demo. Deployment publik memerlukan hosting, HTTPS, pengamanan credential, dan konfigurasi server produksi.
+- Uji calon pengguna, bukti umpan balik, APK kandidat/final, video, bahan presentasi, serta commit/push perubahan terbaru masih harus dilengkapi. Jangan mengisi hasil uji pengguna tanpa sesi uji yang benar-benar dilakukan.
 
 ## Lisensi dan penggunaan
 

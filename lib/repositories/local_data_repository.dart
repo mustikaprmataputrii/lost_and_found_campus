@@ -4,11 +4,13 @@ class LocalDataSnapshot {
   final List<BarangItem> reports;
   final List<SesiChat> chats;
   final List<NotifikasiItem> notifications;
+  final List<AdminUser> users;
 
   const LocalDataSnapshot({
     required this.reports,
     required this.chats,
     required this.notifications,
+    this.users = const [],
   });
 }
 

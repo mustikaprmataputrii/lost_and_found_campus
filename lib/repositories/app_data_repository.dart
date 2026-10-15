@@ -108,4 +108,27 @@ class AppDataRepository {
   Future<LocalDataSnapshot> loadAdmin({required String token}) {
     return _remote.loadAdmin(token: token);
   }
+
+  Future<void> updateAdminUser({
+    required String token,
+    required String currentEmail,
+    required String nim,
+    required String email,
+    required String nama,
+  }) {
+    return _remote.updateAdminUser(
+      token: token,
+      currentEmail: currentEmail,
+      nim: nim,
+      email: email,
+      nama: nama,
+    );
+  }
+
+  Future<void> deleteAdminUser({
+    required String token,
+    required String email,
+  }) {
+    return _remote.deleteAdminUser(token: token, email: email);
+  }
 }

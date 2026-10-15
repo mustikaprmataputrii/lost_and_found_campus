@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "temu: siapkan backend",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "$projectRoot = '${workspaceFolder}'; Set-Location -LiteralPath $projectRoot; $healthUrl = 'http://127.0.0.1:8088/api/index.php?path=health'; try { $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2; if ($health.ok -and $health.database -eq 'connected') { Write-Output 'TEMU API dan database sudah siap.'; exit 0 } } catch {}; $php = (Get-Command php.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source); if (-not $php -and (Test-Path -LiteralPath 'D:/laragon/bin/php')) { $php = Get-ChildItem -Path 'D:/laragon/bin/php/*/php.exe' -File -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName }; if (-not $php) { Write-Error 'PHP tidak ditemukan. Instal/aktifkan PHP Laragon atau tambahkan php.exe ke PATH.'; exit 1 }; Start-Process -FilePath $php -ArgumentList @('-S', '127.0.0.1:8088', '-t', (Join-Path $projectRoot 'backend/public')) -WorkingDirectory $projectRoot -WindowStyle Hidden; for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Seconds 1; try { $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2; if ($health.ok -and $health.database -eq 'connected') { Write-Output 'TEMU API dan database siap. Flutter akan dibuka di Chrome.'; exit 0 } } catch {} }; Write-Error 'Backend belum siap. Pastikan MySQL Laragon aktif dan database lost_and_found_campus sudah dibuat.'; exit 1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

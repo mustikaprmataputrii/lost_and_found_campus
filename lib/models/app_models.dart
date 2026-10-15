@@ -202,3 +202,34 @@ class AdminLoginResult {
     );
   }
 }
+
+class AdminUser {
+  final String nim;
+  final String email;
+  final String nama;
+  final bool isOnline;
+  final DateTime? lastSeen;
+  final DateTime? createdAt;
+
+  const AdminUser({
+    required this.nim,
+    required this.email,
+    required this.nama,
+    this.isOnline = false,
+    this.lastSeen,
+    this.createdAt,
+  });
+
+  factory AdminUser.fromMap(Map<dynamic, dynamic> raw) => AdminUser(
+        nim: '${raw['nim'] ?? ''}',
+        email: '${raw['email'] ?? ''}',
+        nama: '${raw['nama'] ?? ''}',
+        isOnline: raw['isOnline'] == true || raw['isOnline'] == 1,
+        lastSeen: raw['lastSeen'] == null
+            ? null
+            : DateTime.tryParse('${raw['lastSeen']}'),
+        createdAt: raw['createdAt'] == null
+            ? null
+            : DateTime.tryParse('${raw['createdAt']}'),
+      );
+}

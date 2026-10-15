@@ -1,5 +1,28 @@
 part of '../main.dart';
 
+class ResponsivePage extends StatelessWidget {
+  final Widget child;
+  final double maxWidth;
+
+  const ResponsivePage({super.key, required this.child, this.maxWidth = 1800});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width =
+              constraints.maxWidth < maxWidth ? constraints.maxWidth : maxWidth;
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: width,
+              height: constraints.maxHeight,
+              child: child,
+            ),
+          );
+        },
+      );
+}
+
 class UinLogo extends StatelessWidget {
   final double size;
   final bool withBackground;
