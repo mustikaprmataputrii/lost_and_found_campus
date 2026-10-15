@@ -7,7 +7,9 @@ Backend REST API sederhana untuk demo akademik menggunakan PHP + MySQL/MariaDB L
 Import file `database/schema.sql` melalui phpMyAdmin Laragon atau MySQL CLI.
 
 Untuk database yang sudah pernah dibuat sebelum fitur multi-akun, jalankan juga
-`database/migrations/001_multi_user_interaction.sql` satu kali.
+`database/migrations/001_multi_user_interaction.sql` dan
+`database/migrations/002_mutual_claims_and_message_unsend.sql` satu kali,
+berurutan.
 
 Contoh CLI PowerShell:
 
@@ -59,13 +61,22 @@ GET /api/index.php?path=health
 - `POST ?path=auth/admin-login`
 - `POST ?path=presence`
 - `POST ?path=chats/start`
+- `POST ?path=claims/request` (pengaju meminta klaim atas laporan)
+- `POST ?path=claims/respond` (pemilik menyetujui atau menolak permintaan)
 - `POST ?path=messages/send`
+- `DELETE ?path=messages&email=...&id=...` (pengirim membatalkan pesannya sendiri)
 - `POST ?path=chats/read`
 - `POST ?path=notifications/read-all`
 - `GET ?path=sync&email=nim@student.uin-malang.ac.id`
 - `GET ?path=admin/sync` dengan header `X-Admin-Token`
 - `POST ?path=sync`
 - `DELETE ?path=reports&email=...&id=...` hanya untuk pemilik laporan
+
+Permintaan klaim mengubah status menjadi `prosesKlaim`; hanya pemilik laporan
+yang dapat menyetujui atau menolak. Persetujuan menandai laporan `selesai`,
+sedangkan penolakan mengembalikannya menjadi `belumDiklaim`. Pesan yang
+dibatalkan dihapus untuk kedua anggota chat; notifikasi yang terkait ikut
+terhapus melalui foreign key.
 
 Backend menjadi sumber data bersama untuk semua akun. Endpoint sync hanya
 memperbarui laporan; pesan ditambahkan melalui `messages/send`, sehingga

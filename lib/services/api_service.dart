@@ -121,6 +121,49 @@ class ApiService {
     await _decode(response);
   }
 
+  Future<void> deleteMessage({
+    required String email,
+    required String messageId,
+  }) async {
+    final response = await _client
+        .delete(_uri('messages', {'email': email, 'id': messageId}))
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
+  Future<void> requestClaim({
+    required String email,
+    required String reportId,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('claims/request'),
+          headers: _headers,
+          body: jsonEncode({'email': email, 'reportId': reportId}),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
+  Future<void> respondToClaim({
+    required String email,
+    required String reportId,
+    required bool approve,
+  }) async {
+    final response = await _client
+        .post(
+          _uri('claims/respond'),
+          headers: _headers,
+          body: jsonEncode({
+            'email': email,
+            'reportId': reportId,
+            'approve': approve,
+          }),
+        )
+        .timeout(const Duration(seconds: 8));
+    await _decode(response);
+  }
+
   Future<void> markChatRead({
     required String email,
     required String chatId,
@@ -202,7 +245,8 @@ class ApiService {
             NotifikasiItem.fromMap(Map<dynamic, dynamic>.from(item as Map)))
         .toList();
     final users = (data['users'] as List? ?? [])
-        .map((item) => AdminUser.fromMap(Map<dynamic, dynamic>.from(item as Map)))
+        .map((item) =>
+            AdminUser.fromMap(Map<dynamic, dynamic>.from(item as Map)))
         .toList();
     return LocalDataSnapshot(
       reports: reports,
@@ -238,11 +282,13 @@ class ApiService {
     required String token,
     required String email,
   }) async {
-    final response = await _client.post(
-      _uri('admin/users/delete'),
-      headers: {..._headers, 'X-Admin-Token': token},
-      body: jsonEncode({'email': email}),
-    ).timeout(const Duration(seconds: 8));
+    final response = await _client
+        .post(
+          _uri('admin/users/delete'),
+          headers: {..._headers, 'X-Admin-Token': token},
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(const Duration(seconds: 8));
     await _decode(response);
   }
 

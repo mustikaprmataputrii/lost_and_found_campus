@@ -25,12 +25,16 @@ CREATE TABLE IF NOT EXISTS reports (
   foto LONGTEXT NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'belumDiklaim',
   user_email VARCHAR(120) NULL,
+  claimant_email VARCHAR(120) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_reports_tanggal (tanggal),
   INDEX idx_reports_jenis (jenis),
   CONSTRAINT fk_reports_user
     FOREIGN KEY (user_email) REFERENCES users(email)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_reports_claimant
+    FOREIGN KEY (claimant_email) REFERENCES users(email)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
@@ -99,11 +103,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   message TEXT NOT NULL,
   waktu DATETIME(6) NOT NULL,
   is_read TINYINT(1) NOT NULL DEFAULT 0,
+  message_id BIGINT UNSIGNED NULL,
   INDEX idx_notifications_email_time (email, waktu),
+  INDEX idx_notifications_message_id (message_id),
   CONSTRAINT fk_notifications_user
     FOREIGN KEY (email) REFERENCES users(email)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT fk_notifications_chat
     FOREIGN KEY (chat_id) REFERENCES chats(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_notifications_message
+    FOREIGN KEY (message_id) REFERENCES messages(id)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;

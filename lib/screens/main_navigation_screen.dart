@@ -290,6 +290,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 currentUserEmail: widget.email,
                 onSendMessage: (text) => _kirimPesanKeServer(sesi.id, text),
                 onRefresh: () => _muatSesiTerbaru(sesi.id),
+                onDeleteMessage: (messageId) =>
+                    _hapusPesanDariServer(sesi.id, messageId),
+                onRequestClaim: () => _ajukanKlaimDariChat(sesi.id),
+                onRespondToClaim: ({required approve}) =>
+                    _tanggapiKlaimDariChat(sesi.id, approve),
                 onStatusChanged: () {
                   setState(() {});
                   unawaited(_simpanData());
@@ -299,6 +304,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<SesiChat?> _kirimPesanKeServer(String chatId, String text) async {
     await AppDataRepository()
         .sendMessage(email: widget.email, chatId: chatId, text: text);
+    return _muatSesiTerbaru(chatId, markRead: false);
+  }
+
+  Future<SesiChat?> _hapusPesanDariServer(
+      String chatId, String messageId) async {
+    await AppDataRepository()
+        .deleteMessage(email: widget.email, messageId: messageId);
+    return _muatSesiTerbaru(chatId, markRead: false);
+  }
+
+  Future<SesiChat?> _ajukanKlaimDariChat(String chatId) async {
+    final sesi = _daftarSesiChat.firstWhere((item) => item.id == chatId);
+    await AppDataRepository().requestClaim(
+      email: widget.email,
+      reportId: sesi.barang.id,
+    );
+    return _muatSesiTerbaru(chatId, markRead: false);
+  }
+
+  Future<SesiChat?> _tanggapiKlaimDariChat(String chatId, bool approve) async {
+    final sesi = _daftarSesiChat.firstWhere((item) => item.id == chatId);
+    await AppDataRepository().respondToClaim(
+      email: widget.email,
+      reportId: sesi.barang.id,
+      approve: approve,
+    );
     return _muatSesiTerbaru(chatId, markRead: false);
   }
 

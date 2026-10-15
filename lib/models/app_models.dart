@@ -15,6 +15,7 @@ class BarangItem {
   final DateTime tanggal;
   final Uint8List? fotoBytes;
   String? pemilikEmail;
+  String? claimantEmail;
   StatusBarang status;
 
   BarangItem({
@@ -28,6 +29,7 @@ class BarangItem {
     required this.tanggal,
     this.fotoBytes,
     this.pemilikEmail,
+    this.claimantEmail,
     this.status = StatusBarang.belumDiklaim,
   });
 
@@ -42,6 +44,7 @@ class BarangItem {
         'tanggal': tanggal.toIso8601String(),
         'foto': fotoBytes == null ? null : base64Encode(fotoBytes!),
         'ownerEmail': pemilikEmail,
+        'claimantEmail': claimantEmail,
         'status': status.name,
       };
 
@@ -61,6 +64,8 @@ class BarangItem {
       tanggal: DateTime.tryParse('${raw['tanggal']}') ?? DateTime.now(),
       fotoBytes: foto is String && foto.isNotEmpty ? base64Decode(foto) : null,
       pemilikEmail: raw['ownerEmail'] == null ? null : '${raw['ownerEmail']}',
+      claimantEmail:
+          raw['claimantEmail'] == null ? null : '${raw['claimantEmail']}',
       status: StatusBarang.values.firstWhere(
         (item) => item.name == raw['status'],
         orElse: () => StatusBarang.belumDiklaim,
@@ -70,6 +75,7 @@ class BarangItem {
 }
 
 class PesanChat {
+  final String? id;
   final String pengirim;
   final String? pengirimEmail;
   final String teks;
@@ -77,13 +83,15 @@ class PesanChat {
   final bool isMe;
 
   PesanChat(
-      {required this.pengirim,
+      {this.id,
+      required this.pengirim,
       this.pengirimEmail,
       required this.teks,
       required this.waktu,
       required this.isMe});
 
   Map<String, dynamic> toMap() => {
+        'id': id,
         'pengirim': pengirim,
         'pengirimEmail': pengirimEmail,
         'teks': teks,
@@ -92,6 +100,7 @@ class PesanChat {
       };
 
   static PesanChat fromMap(Map<dynamic, dynamic> raw) => PesanChat(
+        id: raw['id'] == null ? null : '${raw['id']}',
         pengirim: '${raw['pengirim'] ?? ''}',
         pengirimEmail:
             raw['pengirimEmail'] == null ? null : '${raw['pengirimEmail']}',

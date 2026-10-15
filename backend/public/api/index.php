@@ -17,7 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 function respond(array $payload, int $status = 200): never
 {
     http_response_code($status);
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $response = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    header('Content-Length: ' . strlen($response));
+    echo $response;
     exit;
 }
 
@@ -259,6 +261,174 @@ if ($method === 'POST' && $path === 'chats/start') {
     }
 }
 
+if ($method === 'POST' && $path === 'claims/request') {
+    $email = strtolower(requireString($body, 'email'));
+    $reportId = trim(requireString($body, 'reportId'));
+    if (!campusEmailIsValid($email) || $reportId === '') {
+        respond(['ok' => false, 'error' => 'Email atau laporan tidak valid.'], 422);
+    }
+
+    try {
+        $db->begin_transaction();
+        $reportStatement = $db->prepare(
+            'SELECT user_email, status, claimant_email, nama
+             FROM reports WHERE id = ? LIMIT 1 FOR UPDATE',
+        );
+        $reportStatement->bind_param('s', $reportId);
+        $reportStatement->execute();
+        $report = $reportStatement->get_result()->fetch_assoc();
+        $reportStatement->close();
+        if ($report === null) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Laporan tidak ditemukan.'], 404);
+        }
+
+        $ownerEmail = strtolower((string) ($report['user_email'] ?? ''));
+        if ($ownerEmail === '' || $ownerEmail === $email) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Pemilik laporan tidak dapat mengajukan klaim pada laporannya sendiri.'], 422);
+        }
+        if ((string) $report['status'] === 'selesai') {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Laporan ini sudah selesai diklaim.'], 409);
+        }
+        if ((string) $report['status'] === 'prosesKlaim') {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Klaim lain sedang menunggu persetujuan pemilik.'], 409);
+        }
+
+        $memberStatement = $db->prepare(
+            'SELECT c.id FROM chats c
+             INNER JOIN chat_members cm ON cm.chat_id = c.id AND cm.email = ?
+             WHERE c.barang_id = ? LIMIT 1 FOR UPDATE',
+        );
+        $memberStatement->bind_param('ss', $email, $reportId);
+        $memberStatement->execute();
+        $chat = $memberStatement->get_result()->fetch_assoc();
+        $memberStatement->close();
+        if ($chat === null) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Mulai percakapan dengan pemilik sebelum mengajukan klaim.'], 409);
+        }
+
+        $updateReport = $db->prepare(
+            "UPDATE reports SET status = 'prosesKlaim', claimant_email = ?
+             WHERE id = ? AND status = 'belumDiklaim'",
+        );
+        $updateReport->bind_param('ss', $email, $reportId);
+        $updateReport->execute();
+        $updated = $updateReport->affected_rows === 1;
+        $updateReport->close();
+        if (!$updated) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Status laporan berubah. Muat ulang lalu coba lagi.'], 409);
+        }
+
+        $notificationKey = hash('sha256', 'claim-request|' . $reportId . '|' . $email);
+        $notification = $db->prepare(
+            'INSERT INTO notifications
+              (notification_key, email, chat_id, title, message, waktu, is_read)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)
+             ON DUPLICATE KEY UPDATE waktu = VALUES(waktu), is_read = 0',
+        );
+        $title = 'Permintaan klaim';
+        $noticeText = $email . ' mengajukan klaim untuk ' . (string) $report['nama'];
+        $chatId = (string) $chat['id'];
+        $notification->bind_param('sssss', $notificationKey, $ownerEmail, $chatId, $title, $noticeText);
+        $notification->execute();
+        $notification->close();
+        $db->commit();
+        respond(['ok' => true, 'data' => ['status' => 'prosesKlaim']]);
+    } catch (Throwable $error) {
+        $db->rollback();
+        respond(['ok' => false, 'error' => 'Permintaan klaim gagal disimpan.'], 500);
+    }
+}
+
+if ($method === 'POST' && $path === 'claims/respond') {
+    $email = strtolower(requireString($body, 'email'));
+    $reportId = trim(requireString($body, 'reportId'));
+    $approve = ($body['approve'] ?? false) === true;
+    if (!campusEmailIsValid($email) || $reportId === '') {
+        respond(['ok' => false, 'error' => 'Email atau laporan tidak valid.'], 422);
+    }
+
+    try {
+        $db->begin_transaction();
+        $reportStatement = $db->prepare(
+            'SELECT user_email, status, claimant_email, nama
+             FROM reports WHERE id = ? LIMIT 1 FOR UPDATE',
+        );
+        $reportStatement->bind_param('s', $reportId);
+        $reportStatement->execute();
+        $report = $reportStatement->get_result()->fetch_assoc();
+        $reportStatement->close();
+        if ($report === null) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Laporan tidak ditemukan.'], 404);
+        }
+        $ownerEmail = strtolower((string) ($report['user_email'] ?? ''));
+        $claimantEmail = strtolower((string) ($report['claimant_email'] ?? ''));
+        if ($email !== $ownerEmail) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Hanya pemilik laporan yang dapat menanggapi klaim.'], 403);
+        }
+        if ((string) $report['status'] !== 'prosesKlaim' || $claimantEmail === '') {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Tidak ada klaim yang menunggu persetujuan.'], 409);
+        }
+
+        $newStatus = $approve ? 'selesai' : 'belumDiklaim';
+        if ($approve) {
+            $updateReport = $db->prepare(
+                "UPDATE reports SET status = 'selesai' WHERE id = ? AND status = 'prosesKlaim' AND claimant_email = ?",
+            );
+            $updateReport->bind_param('ss', $reportId, $claimantEmail);
+        } else {
+            $updateReport = $db->prepare(
+                "UPDATE reports SET status = 'belumDiklaim', claimant_email = NULL
+                 WHERE id = ? AND status = 'prosesKlaim' AND claimant_email = ?",
+            );
+            $updateReport->bind_param('ss', $reportId, $claimantEmail);
+        }
+        $updateReport->execute();
+        $updated = $updateReport->affected_rows === 1;
+        $updateReport->close();
+        if (!$updated) {
+            $db->rollback();
+            respond(['ok' => false, 'error' => 'Status klaim berubah. Muat ulang lalu coba lagi.'], 409);
+        }
+
+        $chatStatement = $db->prepare(
+            'SELECT id FROM chats WHERE barang_id = ? ORDER BY updated_at DESC LIMIT 1',
+        );
+        $chatStatement->bind_param('s', $reportId);
+        $chatStatement->execute();
+        $chat = $chatStatement->get_result()->fetch_assoc();
+        $chatStatement->close();
+        $notificationKey = hash('sha256', 'claim-response|' . $reportId . '|' . $claimantEmail . '|' . $newStatus);
+        $notification = $db->prepare(
+            'INSERT INTO notifications
+              (notification_key, email, chat_id, title, message, waktu, is_read)
+             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)
+             ON DUPLICATE KEY UPDATE waktu = VALUES(waktu), is_read = 0',
+        );
+        $title = $approve ? 'Klaim disetujui' : 'Klaim ditolak';
+        $noticeText = $approve
+            ? 'Pemilik menyetujui klaim ' . (string) $report['nama'] . '.'
+            : 'Pemilik menolak klaim ' . (string) $report['nama'] . '. Barang kembali tersedia.';
+        $chatId = $chat === null ? null : (string) $chat['id'];
+        $notification->bind_param('sssss', $notificationKey, $claimantEmail, $chatId, $title, $noticeText);
+        $notification->execute();
+        $notification->close();
+        $db->commit();
+        respond(['ok' => true, 'data' => ['status' => $newStatus]]);
+    } catch (Throwable $error) {
+        $db->rollback();
+        respond(['ok' => false, 'error' => 'Tanggapan klaim gagal disimpan.'], 500);
+    }
+}
+
 if ($method === 'POST' && $path === 'messages/send') {
     $email = strtolower(requireString($body, 'email'));
     $chatId = trim(requireString($body, 'chatId'));
@@ -316,8 +486,8 @@ if ($method === 'POST' && $path === 'messages/send') {
         $recipients = $recipientStatement->get_result();
         $notification = $db->prepare(
             'INSERT INTO notifications
-              (notification_key, email, chat_id, title, message, waktu, is_read)
-             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)',
+              (notification_key, email, chat_id, message_id, title, message, waktu, is_read)
+             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)',
         );
         $title = 'Pesan baru';
         $noticeText = $senderName . ': ' . $text;
@@ -325,10 +495,11 @@ if ($method === 'POST' && $path === 'messages/send') {
             $recipientEmail = strtolower((string) $recipient['email']);
             $notificationKey = hash('sha256', $chatId . '|' . $messageId . '|' . $recipientEmail);
             $notification->bind_param(
-                'sssss',
+                'sssiss',
                 $notificationKey,
                 $recipientEmail,
                 $chatId,
+                $messageId,
                 $title,
                 $noticeText,
             );
@@ -476,6 +647,32 @@ if ($method === 'POST' && in_array($path, ['admin/users/update', 'admin/users/de
     }
 }
 
+if ($method === 'DELETE' && $path === 'messages') {
+    $email = strtolower(trim((string) ($_GET['email'] ?? '')));
+    $messageId = trim((string) ($_GET['id'] ?? ''));
+    if (!campusEmailIsValid($email) || !ctype_digit($messageId)) {
+        respond(['ok' => false, 'error' => 'Email atau pesan tidak valid.'], 422);
+    }
+    $membership = $db->prepare(
+        'SELECT m.chat_id FROM messages m
+         INNER JOIN chat_members cm ON cm.chat_id = m.chat_id AND cm.email = ?
+         WHERE m.id = ? AND m.pengirim_email = ? LIMIT 1',
+    );
+    $membership->bind_param('sss', $email, $messageId, $email);
+    $membership->execute();
+    $message = $membership->get_result()->fetch_assoc();
+    $membership->close();
+    if ($message === null) {
+        respond(['ok' => false, 'error' => 'Pesan tidak ditemukan atau bukan pesan yang Anda kirim.'], 404);
+    }
+    $delete = $db->prepare('DELETE FROM messages WHERE id = ? AND pengirim_email = ?');
+    $delete->bind_param('ss', $messageId, $email);
+    $delete->execute();
+    $deleted = $delete->affected_rows === 1;
+    $delete->close();
+    respond(['ok' => $deleted, 'data' => ['deleted' => $deleted]], $deleted ? 200 : 404);
+}
+
 if ($method === 'DELETE' && $path === 'reports') {
     $email = strtolower(trim((string) ($_GET['email'] ?? '')));
     $reportId = trim((string) ($_GET['id'] ?? ''));
@@ -542,13 +739,16 @@ if ($method === 'GET') {
     $reports = [];
     $reportResult = $db->query(
         'SELECT id, nama, lokasi, deskripsi, jenis, pelapor, kontak,
-                tanggal, foto, status, user_email
+                tanggal, foto, status, user_email, claimant_email
          FROM reports
          ORDER BY tanggal DESC',
     );
     while ($row = $reportResult->fetch_assoc()) {
         $row['tanggal'] = isoDate($row['tanggal']);
         $row['ownerEmail'] = strtolower((string) $row['user_email']);
+        $row['claimantEmail'] = $row['claimant_email'] === null
+            ? null
+            : strtolower((string) $row['claimant_email']);
         unset($row['user_email']);
         $reports[] = $row;
     }
@@ -594,6 +794,7 @@ if ($method === 'GET') {
                   r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
                   r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
                   r.user_email AS report_owner_email,
+                  r.claimant_email AS report_claimant_email,
                   owner_user.nama AS peer_name
            FROM chats c
            INNER JOIN reports r ON r.id = c.barang_id
@@ -612,6 +813,7 @@ if ($method === 'GET') {
                   r.id AS report_id, r.nama, r.lokasi, r.deskripsi, r.jenis,
                   r.pelapor, r.kontak, r.tanggal, r.foto, r.status,
                   r.user_email AS report_owner_email,
+                  r.claimant_email AS report_claimant_email,
                   peer_user.nama AS peer_name
            FROM chats c
            INNER JOIN reports r ON r.id = c.barang_id
@@ -638,7 +840,7 @@ if ($method === 'GET') {
     $chatRows = $chatStatement->get_result();
 
     $messageStatement = $db->prepare(
-        'SELECT pengirim, pengirim_email, teks, waktu, is_me
+        'SELECT id, pengirim, pengirim_email, teks, waktu, is_me
          FROM messages
          WHERE chat_id = ?
          ORDER BY waktu ASC, id ASC',
@@ -653,6 +855,7 @@ if ($method === 'GET') {
         while ($message = $messageRows->fetch_assoc()) {
             $senderEmail = strtolower((string) ($message['pengirim_email'] ?? ''));
             $messages[] = [
+                'id' => (string) $message['id'],
                 'pengirim' => $message['pengirim'],
                 'teks' => $message['teks'],
                 'waktu' => isoDate($message['waktu']),
@@ -678,6 +881,9 @@ if ($method === 'GET') {
                 'foto' => $row['foto'],
                 'status' => $row['status'],
                 'ownerEmail' => strtolower((string) ($row['report_owner_email'] ?? '')),
+                'claimantEmail' => $row['report_claimant_email'] === null
+                    ? null
+                    : strtolower((string) $row['report_claimant_email']),
             ],
             'pesanList' => $messages,
             'isOnline' => (bool) ($row['peer_online'] ?? $row['is_online']),
@@ -752,8 +958,7 @@ try {
            nama = VALUES(nama), lokasi = VALUES(lokasi),
            deskripsi = VALUES(deskripsi), jenis = VALUES(jenis),
            pelapor = VALUES(pelapor), kontak = VALUES(kontak),
-           tanggal = VALUES(tanggal), foto = VALUES(foto),
-           status = VALUES(status)',
+            tanggal = VALUES(tanggal), foto = VALUES(foto)',
     );
 
     foreach ($reports as $report) {
@@ -776,7 +981,8 @@ try {
         $photo = isset($report['foto']) && $report['foto'] !== ''
             ? (string) $report['foto']
             : null;
-        $status = (string) ($report['status'] ?? 'belumDiklaim');
+        // Only claim endpoints can change status; client snapshots can be stale.
+        $status = 'belumDiklaim';
 
         $reportStatement->bind_param(
             'sssssssssss',

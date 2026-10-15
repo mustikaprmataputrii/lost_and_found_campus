@@ -11,6 +11,7 @@ BarangItem _barangUji() => BarangItem(
       pelapor: 'Mahasiswa Uji',
       kontak: '081234567890',
       tanggal: DateTime(2026, 10, 7, 10),
+      pemilikEmail: 'owner@student.uin-malang.ac.id',
     );
 
 SesiChat _sesiUji() => SesiChat(
@@ -167,6 +168,110 @@ void main() {
       expect(find.text('Sudah saya temukan.'), findsOneWidget);
       expect(sesi.pesanList.last.teks, 'Sudah saya temukan.');
       expect(changed, isTrue);
+    });
+
+    testWidgets('pengirim dapat membatalkan pesan terkirim untuk kedua pihak',
+        (tester) async {
+      final message = PesanChat(
+        id: '42',
+        pengirim: 'Saya',
+        pengirimEmail: '23123456@student.uin-malang.ac.id',
+        teks: 'Pesan yang dibatalkan',
+        waktu: DateTime(2026, 10, 7, 10, 20),
+        isMe: true,
+      );
+      final sesi = SesiChat(
+        id: 'test-chat',
+        barang: _barangUji(),
+        pesanList: [message],
+      );
+      String? deletedId;
+
+      await tester.pumpWidget(MaterialApp(
+        home: RoomChatScreen(
+          sesi: sesi,
+          currentUserName: 'Saya',
+          currentUserEmail: '23123456@student.uin-malang.ac.id',
+          onStatusChanged: () {},
+          onDeleteMessage: (id) async {
+            deletedId = id;
+            sesi.pesanList.removeWhere((item) => item.id == id);
+            return sesi;
+          },
+        ),
+      ));
+
+      await tester.longPress(find.text('Pesan yang dibatalkan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Batalkan pengiriman pesan?'), findsOneWidget);
+      await tester.tap(find.text('Batalkan pesan'));
+      await tester.pumpAndSettle();
+
+      expect(deletedId, '42');
+      expect(find.text('Pesan yang dibatalkan'), findsNothing);
+      expect(find.text('Pesan berhasil dibatalkan untuk kedua pihak.'),
+          findsOneWidget);
+    });
+
+    testWidgets('klaim menunggu persetujuan pemilik laporan', (tester) async {
+      final sesi = _sesiUji();
+      var requested = false;
+      await tester.pumpWidget(MaterialApp(
+        home: RoomChatScreen(
+          sesi: sesi,
+          currentUserName: 'Pengklaim',
+          currentUserEmail: '23123456@student.uin-malang.ac.id',
+          onStatusChanged: () {},
+          onRequestClaim: () async {
+            requested = true;
+            sesi.barang
+              ..status = StatusBarang.prosesKlaim
+              ..claimantEmail = '23123456@student.uin-malang.ac.id';
+            return sesi;
+          },
+        ),
+      ));
+
+      await tester.tap(find.text('Ajukan klaim'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ajukan klaim').last);
+      await tester.pumpAndSettle();
+
+      expect(requested, isTrue);
+      expect(
+          find.text('Menunggu persetujuan pemilik laporan.'), findsOneWidget);
+    });
+
+    testWidgets('pemilik menyetujui klaim dan laporan menjadi selesai',
+        (tester) async {
+      final sesi = _sesiUji();
+      sesi.barang
+        ..status = StatusBarang.prosesKlaim
+        ..claimantEmail = '23123456@student.uin-malang.ac.id';
+      var approved = false;
+
+      await tester.pumpWidget(MaterialApp(
+        home: RoomChatScreen(
+          sesi: sesi,
+          currentUserName: 'Pemilik',
+          currentUserEmail: 'owner@student.uin-malang.ac.id',
+          onStatusChanged: () {},
+          onRespondToClaim: ({required approve}) async {
+            approved = approve;
+            sesi.barang.status = StatusBarang.selesai;
+            return sesi;
+          },
+        ),
+      ));
+
+      await tester.tap(find.text('Setujui klaim'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Setujui').last);
+      await tester.pumpAndSettle();
+
+      expect(approved, isTrue);
+      expect(sesi.barang.status, StatusBarang.selesai);
+      expect(find.text('Klaim disetujui kedua pihak.'), findsOneWidget);
     });
   });
 }

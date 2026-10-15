@@ -9,7 +9,7 @@ class DaftarChatScreen extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Chat klaim')),
       body: ResponsivePage(
-        maxWidth: 1600,
+          maxWidth: 1600,
           child: daftarSesi.isEmpty
               ? const Center(
                   child: Text('Belum ada percakapan aktif.',
@@ -101,6 +101,9 @@ class RoomChatScreen extends StatefulWidget {
   final VoidCallback onStatusChanged;
   final Future<SesiChat?> Function(String text)? onSendMessage;
   final Future<SesiChat?> Function()? onRefresh;
+  final Future<SesiChat?> Function(String messageId)? onDeleteMessage;
+  final Future<SesiChat?> Function()? onRequestClaim;
+  final Future<SesiChat?> Function({required bool approve})? onRespondToClaim;
   const RoomChatScreen(
       {super.key,
       required this.sesi,
@@ -108,7 +111,10 @@ class RoomChatScreen extends StatefulWidget {
       required this.currentUserEmail,
       required this.onStatusChanged,
       this.onSendMessage,
-      this.onRefresh});
+      this.onRefresh,
+      this.onDeleteMessage,
+      this.onRequestClaim,
+      this.onRespondToClaim});
   @override
   State<RoomChatScreen> createState() => _RoomChatScreenState();
 }
@@ -119,6 +125,7 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
   late SesiChat _sesi = widget.sesi;
   Timer? _refreshTimer;
   bool _sending = false;
+  bool _claimBusy = false;
 
   @override
   void initState() {
@@ -188,26 +195,244 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     });
   }
 
-  void _selesaikanKlaim() {
-    showDialog<void>(
+  Future<bool> _konfirmasi({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async =>
+      await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-                title: const Text('Selesaikan klaim?'),
-                content: const Text(
-                    'Tandai barang ini sudah diserahkan kepada pemiliknya?'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('Batal')),
-                  FilledButton(
-                      onPressed: () {
-                        setState(
-                            () => _sesi.barang.status = StatusBarang.selesai);
-                        widget.onStatusChanged();
-                        Navigator.pop(dialogContext);
-                      },
-                      child: const Text('Ya, selesai'))
-                ]));
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(confirmLabel)),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _batalkanPesan(PesanChat message) async {
+    final id = message.id;
+    final callback = widget.onDeleteMessage;
+    if (id == null || callback == null) return;
+    final confirmed = await _konfirmasi(
+      title: 'Batalkan pengiriman pesan?',
+      message: 'Pesan ini akan dihapus dari percakapan untuk kedua pihak.',
+      confirmLabel: 'Batalkan pesan',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      final refreshed = await callback(id);
+      if (!mounted) return;
+      setState(() {
+        if (refreshed != null) {
+          _sesi = refreshed;
+        } else {
+          _sesi.pesanList.removeWhere((item) => item.id == id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Pesan berhasil dibatalkan untuk kedua pihak.'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.toString().replaceFirst('Exception: ', '')),
+      ));
+    }
+  }
+
+  Future<void> _ajukanKlaim() async {
+    final callback = widget.onRequestClaim;
+    if (callback == null || _claimBusy) return;
+    final confirmed = await _konfirmasi(
+      title: 'Ajukan klaim barang?',
+      message:
+          'Pemilik laporan akan diminta menyetujui klaim ini. Status selesai hanya berubah setelah pemilik menyetujuinya.',
+      confirmLabel: 'Ajukan klaim',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _claimBusy = true);
+    try {
+      final refreshed = await callback();
+      if (mounted && refreshed != null) setState(() => _sesi = refreshed);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _claimBusy = false);
+    }
+  }
+
+  Future<void> _tanggapiKlaim(bool approve) async {
+    final callback = widget.onRespondToClaim;
+    if (callback == null || _claimBusy) return;
+    final confirmed = await _konfirmasi(
+      title: approve ? 'Setujui klaim?' : 'Tolak klaim?',
+      message: approve
+          ? 'Klaim akan disepakati oleh pemilik dan pengaju, lalu laporan ditandai selesai.'
+          : 'Klaim ini ditolak dan laporan akan kembali tersedia.',
+      confirmLabel: approve ? 'Setujui' : 'Tolak',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _claimBusy = true);
+    try {
+      final refreshed = await callback(approve: approve);
+      if (mounted && refreshed != null) setState(() => _sesi = refreshed);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _claimBusy = false);
+    }
+  }
+
+  Widget? _buildClaimPanel() {
+    final report = _sesi.barang;
+    final isOwner = report.pemilikEmail == widget.currentUserEmail;
+    final isClaimant = report.claimantEmail == widget.currentUserEmail;
+    if (report.status == StatusBarang.selesai) {
+      return _claimNotice(
+          Icons.verified_outlined, 'Klaim disetujui kedua pihak.');
+    }
+    if (report.status == StatusBarang.prosesKlaim) {
+      if (isOwner && widget.onRespondToClaim != null) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          color: UINColors.mint,
+          child: Column(children: [
+            Text('Permintaan klaim dari ${report.claimantEmail ?? 'pengguna'}'),
+            const SizedBox(height: 7),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _claimBusy ? null : () => _tanggapiKlaim(false),
+                  child: const Text('Tolak'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _claimBusy ? null : () => _tanggapiKlaim(true),
+                  child: const Text('Setujui klaim'),
+                ),
+              ),
+            ]),
+          ]),
+        );
+      }
+      return _claimNotice(
+        Icons.hourglass_top_rounded,
+        isClaimant
+            ? 'Menunggu persetujuan pemilik laporan.'
+            : 'Klaim sedang menunggu persetujuan pemilik.',
+      );
+    }
+    if (!isOwner && widget.onRequestClaim != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: UINColors.mint,
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _claimBusy ? null : _ajukanKlaim,
+            icon: const Icon(Icons.handshake_outlined),
+            label: Text(_claimBusy ? 'Mengirim permintaan...' : 'Ajukan klaim'),
+          ),
+        ),
+      );
+    }
+    return null;
+  }
+
+  Widget _claimNotice(IconData icon, String text) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        color: UINColors.mint,
+        child: Row(children: [
+          Icon(icon, color: UINColors.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text)),
+        ]),
+      );
+
+  Widget _buildMessage(PesanChat message) {
+    final canUnsend =
+        message.isMe && message.id != null && widget.onDeleteMessage != null;
+    return Align(
+      alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Tooltip(
+        message: canUnsend ? 'Tekan lama untuk membatalkan pesan' : '',
+        child: GestureDetector(
+          onLongPress: canUnsend ? () => _batalkanPesan(message) : null,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
+            constraints: const BoxConstraints(maxWidth: 310),
+            decoration: BoxDecoration(
+              color: message.isMe ? UINColors.primary : Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(message.isMe ? 18 : 4),
+                bottomRight: Radius.circular(message.isMe ? 4 : 18),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!message.isMe)
+                  Text(message.pengirim,
+                      style: const TextStyle(
+                          fontSize: 10,
+                          color: UINColors.primary,
+                          fontWeight: FontWeight.w800)),
+                Text(message.teks,
+                    style: TextStyle(
+                        color: message.isMe ? Colors.white : UINColors.ink,
+                        height: 1.35)),
+                const SizedBox(height: 4),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_formatJam(message.waktu),
+                      style: TextStyle(
+                          color:
+                              message.isMe ? Colors.white70 : UINColors.muted,
+                          fontSize: 9)),
+                  if (canUnsend)
+                    PopupMenuButton<String>(
+                      tooltip: 'Opsi pesan',
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      iconSize: 17,
+                      icon: const Icon(Icons.more_horiz, color: Colors.white70),
+                      onSelected: (_) => _batalkanPesan(message),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'unsend',
+                          child: Text('Batalkan pengiriman'),
+                        ),
+                      ],
+                    ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -229,67 +454,18 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
                   compact: true)
             ])
           ]),
-          actions: [
-            if (_sesi.barang.status != StatusBarang.selesai)
-              IconButton(
-                  onPressed: _selesaikanKlaim,
-                  tooltip: 'Tandai selesai',
-                  icon: const Icon(Icons.check_circle_outline)),
-            const SizedBox(width: 6)
-          ]),
+          actions: const [SizedBox(width: 6)]),
       body: ResponsivePage(
           maxWidth: 1600,
           child: Column(children: [
+            if (_buildClaimPanel() case final panel?) panel,
             Expanded(
                 child: ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
                     itemCount: _sesi.pesanList.length,
-                    itemBuilder: (_, index) {
-                      final message = _sesi.pesanList[index];
-                      return Align(
-                          alignment: message.isMe
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.fromLTRB(14, 10, 14, 9),
-                              constraints: const BoxConstraints(maxWidth: 310),
-                              decoration: BoxDecoration(
-                                  color: message.isMe
-                                      ? UINColors.primary
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.only(
-                                      topLeft: const Radius.circular(18),
-                                      topRight: const Radius.circular(18),
-                                      bottomLeft: Radius.circular(
-                                          message.isMe ? 18 : 4),
-                                      bottomRight: Radius.circular(
-                                          message.isMe ? 4 : 18))),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (!message.isMe)
-                                      Text(message.pengirim,
-                                          style: const TextStyle(
-                                              fontSize: 10,
-                                              color: UINColors.primary,
-                                              fontWeight: FontWeight.w800)),
-                                    Text(message.teks,
-                                        style: TextStyle(
-                                            color: message.isMe
-                                                ? Colors.white
-                                                : UINColors.ink,
-                                            height: 1.35)),
-                                    const SizedBox(height: 4),
-                                    Text(_formatJam(message.waktu),
-                                        style: TextStyle(
-                                            color: message.isMe
-                                                ? Colors.white70
-                                                : UINColors.muted,
-                                            fontSize: 9))
-                                  ])));
-                    })),
+                    itemBuilder: (_, index) =>
+                        _buildMessage(_sesi.pesanList[index]))),
             Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                 color: Colors.white,

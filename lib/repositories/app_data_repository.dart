@@ -80,6 +80,32 @@ class AppDataRepository {
     return _remote.sendMessage(email: email, chatId: chatId, text: text);
   }
 
+  Future<void> deleteMessage({
+    required String email,
+    required String messageId,
+  }) {
+    return _remote.deleteMessage(email: email, messageId: messageId);
+  }
+
+  Future<void> requestClaim({
+    required String email,
+    required String reportId,
+  }) {
+    return _remote.requestClaim(email: email, reportId: reportId);
+  }
+
+  Future<void> respondToClaim({
+    required String email,
+    required String reportId,
+    required bool approve,
+  }) {
+    return _remote.respondToClaim(
+      email: email,
+      reportId: reportId,
+      approve: approve,
+    );
+  }
+
   Future<void> markChatRead({
     required String email,
     required String chatId,
