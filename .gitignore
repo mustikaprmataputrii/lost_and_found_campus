@@ -50,3 +50,6 @@ app.*.map.json
 # Local backend secrets
 /backend/.env
 /backend/config.local.php
+
+# Local demo configuration
+/scripts/demo.local.ps1

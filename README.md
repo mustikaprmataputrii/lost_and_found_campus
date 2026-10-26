@@ -26,6 +26,8 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 - Logo dan nuansa visual UIN Malang.
 - Penyimpanan utama menggunakan MySQL/MariaDB melalui REST API.
 - Cache lokal menggunakan Hive sebagai buffer penulisan perangkat, sedangkan server menjadi sumber data bersama.
+- Antrean upload lokal dengan retry dan backoff saat jaringan atau server bermasalah.
+- Fallback cache Hive saat API sementara tidak dapat diakses.
 - Sinkronisasi berkala memperbarui laporan, chat, notifikasi, dan status kehadiran pengguna.
 - Dukungan target Flutter Web, Android, iOS, Windows, macOS, dan Linux sesuai ketersediaan toolchain perangkat.
 
@@ -35,19 +37,28 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 Flutter UI
    |
    +-- AppDataRepository
+   |      |
+   |      +-- ApiService
+   |      |      |
+   |      |      +-- PHP REST API
+   |      |             |
+   |      |             +-- MySQL/MariaDB Laragon
+   |      |
+   |      +-- LocalDataRepository
+   |             |
+   |             +-- Hive cache/fallback
+   |
+   +-- ReportUploadQueue
           |
           +-- ApiService
-          |      |
-          |      +-- PHP REST API
-          |             |
-          |             +-- MySQL/MariaDB Laragon
-          |
-          +-- LocalDataRepository
-                 |
-                 +-- Hive cache/fallback
+          +-- Hive outbox (retry)
 ```
 
-Aplikasi mengambil data bersama dari backend MySQL melalui REST API. Cache Hive dipakai sebagai buffer penulisan perangkat, tetapi tidak digunakan untuk menampilkan data akun lain ketika backend gagal diakses. Dengan demikian, cache akun sebelumnya tidak terbawa ke akun yang baru login.
+Aplikasi mengambil data bersama dari backend MySQL melalui REST API. Cache Hive
+dipakai sebagai buffer penulisan perangkat dan fallback saat backend gagal
+diakses. Laporan yang gagal dikirim karena masalah jaringan disimpan di outbox
+Hive, lalu dicoba ulang saat aplikasi aktif kembali. Cache tidak digunakan untuk
+menampilkan data akun lain; antrean juga difilter berdasarkan email akun aktif.
 
 ## Struktur folder penting
 
@@ -64,7 +75,8 @@ lib/
 ├── screens/                   # Halaman login, dashboard, laporan, chat, profil
 ├── services/
 │   ├── api_service.dart       # Komunikasi Flutter dengan REST API
-│   └── app_services.dart      # Auth dan session service
+│   ├── app_services.dart      # Auth dan session service
+│   └── report_upload_queue.dart # Antrean upload, retry, dan backoff
 ├── widgets/                   # Komponen UI yang digunakan bersama
 └── main.dart                  # Entry point dan registrasi modul
 
@@ -73,6 +85,10 @@ backend/
 ├── public/api/index.php       # REST API PHP
 ├── config.php                 # Konfigurasi koneksi database
 └── README.md                  # Panduan backend
+
+docs/                          # Audit, panduan queue, dan laporan tahap
+scripts/                       # Script demo lokal dan template konfigurasi
+test/                          # Unit dan widget test
 ```
 
 ## Kebutuhan sistem
@@ -138,7 +154,10 @@ $env:TEMU_DB_PASSWORD = ''
 $env:TEMU_CORS_ORIGIN = '*'
 ```
 
-Konfigurasi default juga tersedia di [backend/config.php](backend/config.php). Jangan menyimpan password database asli ke repository.
+Jika MySQL Laragon berjalan pada port lain, misalnya `3307`, sesuaikan
+`TEMU_DB_PORT`. Konfigurasi default juga tersedia di
+[backend/config.php](backend/config.php). Jangan menyimpan password database
+asli ke repository.
 
 ## Menjalankan REST API
 
@@ -160,6 +179,52 @@ Pemeriksaan kesehatan API:
 ```text
 GET /api/index.php?path=health
 ```
+
+## Demo APK Android melalui server laptop
+
+Demo APK membutuhkan API yang dapat diakses dari perangkat. Repository tidak
+menyimpan ID tunnel, URL tunnel, path instalasi lokal, atau konfigurasi pribadi.
+
+Konfigurasi demo disimpan di `scripts/demo.local.ps1` (diabaikan Git). Buat file
+tersebut dari template:
+
+```powershell
+Copy-Item .\scripts\demo.local.example.ps1 .\scripts\demo.local.ps1
+```
+
+Isi variabel berikut sesuai komputer demo:
+
+- `TEMU_TUNNEL_ID`: ID tunnel Dev Tunnels.
+- `TEMU_PUBLIC_API_URL`: URL API publik yang dipakai APK.
+- `TEMU_PHP_EXE`: path `php.exe` bila tidak tersedia di `PATH`.
+- `TEMU_DEVTUNNEL_EXE`: path `devtunnel.exe` bila tidak tersedia di `PATH`.
+- `TEMU_MYSQL_SERVICE`: nama service MySQL, default `MySQL80`.
+- `TEMU_DB_PORT`: port MySQL, default `3306`.
+- `TEMU_API_PORT`: port API lokal, default `8088`.
+
+Setelah konfigurasi siap, jalankan `MULAI_SERVER_TEMU.bat` sebagai Administrator.
+Script akan:
+
+- menyalakan service MySQL jika service tersedia dan belum berjalan;
+- memeriksa koneksi database pada port yang dikonfigurasi;
+- memperpanjang tunnel dan membuka akses anonim sementara;
+- menjalankan API PHP dan memeriksa endpoint health;
+- menutup tunnel, API, dan MySQL yang disalakan script saat `Ctrl+C`.
+
+APK uji harus dibangun dengan URL yang sama:
+
+```powershell
+flutter build apk --release `
+  --dart-define=API_BASE_URL=https://<tunnel-anda>-8088.asse.devtunnels.ms/api/index.php
+```
+
+APK uji yang dibangun sebelumnya berada di luar repository dan hanya berlaku
+selama tunnel demo masih aktif. APK tersebut belum siap untuk distribusi resmi.
+
+Tunnel diperpanjang hingga 30 hari tanpa aktivitas setiap kali script berjalan.
+Jika tidak digunakan lebih dari 30 hari, tunnel dapat kedaluwarsa dan perlu
+dibuat ulang. Akses anonim hanya dibuka saat demo dan kedaluwarsa otomatis
+setelah 4 jam.
 
 Endpoint yang tersedia:
 
@@ -309,6 +374,12 @@ php -l backend/config.php
 php -l backend/public/api/index.php
 ```
 
+## Dokumentasi tambahan
+
+- [Audit baseline dan perbaikan fondasi](docs/AUDIT_BASELINE_FONDASI.md)
+- [Lifecycle-aware upload queue dan retry](docs/LIFECYCLE_UPLOAD_QUEUE.md)
+- [Laporan Tahap 4–5](docs/Laporan_Tahap_4_dan_5_TEMU_UIN_Malang.docx)
+
 ## Status implementasi MVP
 
 Project telah memenuhi fungsi utama MVP:
@@ -322,11 +393,14 @@ Project telah memenuhi fungsi utama MVP:
 - Penyimpanan lokal Hive tersedia sebagai buffer perangkat tanpa mencampurkan data antar akun.
 - Identitas email, NIM, dan nama dikunci di database; perubahan identitas pada email yang sama ditolak.
 - Laporan milik akun lain, anggota chat, notifikasi pesan, dan presence dibaca dari database bersama.
-- Flutter analyze terakhir: lulus (`No issues found`).
+- Antrean upload lifecycle-aware menyimpan laporan yang gagal terkirim dan mencoba ulang dengan backoff.
+- Error API membawa status HTTP sehingga kegagalan validasi tidak diulang terus.
+- Flutter analyze terakhir: lulus (`No issues found`) pada 26 Oktober 2026.
 - PHP lint untuk `backend/config.php` dan `backend/public/api/index.php`: lulus.
-- Terdapat 10 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, dan smoke test. Eksekusi ulang pada 15 Oktober 2026 lulus (`All tests passed`).
+- Terdapat 31 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, antrean upload, dan smoke test. Eksekusi ulang pada 26 Oktober 2026 lulus (`All tests passed`).
+- Uji backend live pada 26 Oktober 2026: health API berhasil, insert/update laporan oleh pemilik berhasil, dan akun lain tidak dapat menimpa laporan.
 - Build Web pernah berhasil; ulangi setelah perubahan final.
-- APK belum tersedia. Build release sudah dicoba ulang, tetapi Android SDK gagal menemukan/memasang NDK `28.2.13676358` (`Package ndk not found`). Lihat [laporan kemajuan Tahap 4–5](docs/Laporan_Tahap_4_dan_5_TEMU_UIN_Malang.docx) untuk matriks uji, bukti perbaikan sebelum/sesudah, formulir evaluasi pengguna, dan checklist finalisasi.
+- APK uji Android pernah dibangun, tetapi masih memakai debug signing dan URL dev tunnel. APK tersebut belum siap untuk distribusi resmi; build release final perlu diulang pada environment yang bersih.
 
 ## Batasan saat ini
 
@@ -334,7 +408,10 @@ Project telah memenuhi fungsi utama MVP:
 - Chat saat ini melakukan sinkronisasi melalui API ketika terjadi perubahan; push notification/WebSocket realtime belum diterapkan.
 - API menggunakan CORS terbuka untuk kebutuhan development lokal. Pada deployment produksi, CORS harus dibatasi ke domain aplikasi.
 - Backend Laragon ditujukan untuk development/demo. Deployment publik memerlukan hosting, HTTPS, pengamanan credential, dan konfigurasi server produksi.
-- Uji calon pengguna, bukti umpan balik, APK kandidat/final, video, bahan presentasi, serta commit/push perubahan terbaru masih harus dilengkapi. Jangan mengisi hasil uji pengguna tanpa sesi uji yang benar-benar dilakukan.
+- Antrean upload berjalan saat aplikasi foreground/aktif. Background worker OS dan listener konektivitas khusus belum diterapkan.
+- Item antrean yang gagal permanen (4xx) dihapus dan dicatat di log; belum ada halaman daftar kegagalan permanen.
+- State recovery penuh (draft form dan auto-login) serta candidate matching hilang/temuan belum diterapkan.
+- Uji calon pengguna, APK final, video, dan bahan presentasi masih harus dilengkapi. Jangan mengisi hasil uji pengguna tanpa sesi uji yang benar-benar dilakukan.
 
 ## Lisensi dan penggunaan
 
