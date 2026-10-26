@@ -14,6 +14,7 @@ part 'core/theme/app_theme.dart';
 part 'models/app_models.dart';
 part 'services/app_services.dart';
 part 'services/api_service.dart';
+part 'services/report_upload_queue.dart';
 part 'repositories/mock_data_repository.dart';
 part 'repositories/local_data_repository.dart';
 part 'repositories/app_data_repository.dart';

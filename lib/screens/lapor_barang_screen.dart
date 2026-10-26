@@ -1,7 +1,7 @@
 part of '../main.dart';
 
 class LaporBarangScreen extends StatefulWidget {
-  final void Function(BarangItem) onLaporanDibuat;
+  final Future<ReportSubmissionResult> Function(BarangItem) onLaporanDibuat;
   final String defaultNama;
   const LaporBarangScreen(
       {super.key, required this.onLaporanDibuat, required this.defaultNama});
@@ -19,6 +19,8 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
   JenisLaporan _jenis = JenisLaporan.ditemukan;
   Uint8List? _fotoBytes;
   bool _isPicking = false;
+  bool _isSubmitting = false;
+  String? _draftId;
 
   @override
   void dispose() {
@@ -107,10 +109,17 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(message), behavior: SnackBarBehavior.floating));
 
-  void _simpanLaporan() {
+  Future<void> _simpanLaporan() async {
+    if (_isSubmitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    widget.onLaporanDibuat(BarangItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+
+    setState(() => _isSubmitting = true);
+    // ID yang sama dipakai ulang saat retry agar kiriman yang timeout tidak
+    // menghasilkan laporan ganda di server.
+    final reportId =
+        _draftId ??= DateTime.now().microsecondsSinceEpoch.toString();
+    final laporan = BarangItem(
+        id: reportId,
         nama: _namaController.text.trim(),
         lokasi: _lokasiController.text.trim(),
         deskripsi: _deskripsiController.text.trim(),
@@ -118,16 +127,31 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
         pelapor: widget.defaultNama,
         kontak: _kontakController.text.trim(),
         tanggal: DateTime.now(),
-        fotoBytes: _fotoBytes));
-    _namaController.clear();
-    _lokasiController.clear();
-    _deskripsiController.clear();
-    _kontakController.clear();
-    setState(() {
-      _fotoBytes = null;
-      _jenis = JenisLaporan.ditemukan;
-    });
-    _tampilkanPesan('Laporan berhasil diterbitkan ke warga kampus.');
+        fotoBytes: _fotoBytes);
+
+    try {
+      final result = await widget.onLaporanDibuat(laporan);
+      if (!mounted) return;
+
+      _namaController.clear();
+      _lokasiController.clear();
+      _deskripsiController.clear();
+      _kontakController.clear();
+      setState(() {
+        _fotoBytes = null;
+        _jenis = JenisLaporan.ditemukan;
+        _draftId = null;
+      });
+      _tampilkanPesan(result.uploaded
+          ? 'Laporan berhasil diterbitkan ke warga kampus.'
+          : 'Laporan disimpan dan akan dikirim otomatis saat koneksi tersedia.');
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString().replaceFirst('Exception: ', '');
+      _tampilkanPesan('Laporan gagal dikirim. $message');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -253,10 +277,19 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
               SizedBox(
                   height: 54,
                   child: FilledButton.icon(
-                      onPressed: _simpanLaporan,
-                      icon: const Icon(Icons.publish_outlined),
-                      label: const Text('TERBITKAN LAPORAN',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      onPressed: _isSubmitting ? null : _simpanLaporan,
+                      icon: _isSubmitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.publish_outlined),
+                      label: Text(
+                          _isSubmitting
+                              ? 'MENGIRIM LAPORAN...'
+                              : 'TERBITKAN LAPORAN',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
                       style: FilledButton.styleFrom(
                           backgroundColor: UINColors.primary,
                           shape: RoundedRectangleBorder(

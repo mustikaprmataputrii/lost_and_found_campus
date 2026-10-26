@@ -5,23 +5,33 @@ class LocalDataSnapshot {
   final List<SesiChat> chats;
   final List<NotifikasiItem> notifications;
   final List<AdminUser> users;
+  final bool fromCache;
 
   const LocalDataSnapshot({
     required this.reports,
     required this.chats,
     required this.notifications,
     this.users = const [],
+    this.fromCache = false,
   });
+
+  bool get hasAnyData =>
+      reports.isNotEmpty ||
+      chats.isNotEmpty ||
+      notifications.isNotEmpty ||
+      users.isNotEmpty;
 }
 
 class LocalDataRepository {
   static const _reportsBoxName = 'temu_reports';
   static const _chatsBoxName = 'temu_chats';
   static const _notificationsBoxName = 'temu_notifications';
+  static const _uploadQueueBoxName = 'temu_upload_queue';
 
   static late Box<Map> _reportsBox;
   static late Box<Map> _chatsBox;
   static late Box<Map> _notificationsBox;
+  static late Box<Map> _uploadQueueBox;
   static bool _initialized = false;
 
   static Future<void> initialize() async {
@@ -34,22 +44,23 @@ class LocalDataRepository {
     _reportsBox = await Hive.openBox<Map>(_reportsBoxName);
     _chatsBox = await Hive.openBox<Map>(_chatsBoxName);
     _notificationsBox = await Hive.openBox<Map>(_notificationsBoxName);
+    _uploadQueueBox = await Hive.openBox<Map>(_uploadQueueBoxName);
     _initialized = true;
   }
 
-  Future<LocalDataSnapshot> load() async {
+  Future<LocalDataSnapshot> load({bool seedIfEmpty = true}) async {
     await initialize();
 
     var reports =
         _reportsBox.values.map((value) => BarangItem.fromMap(value)).toList();
-    if (reports.isEmpty) {
+    if (seedIfEmpty && reports.isEmpty) {
       reports = MockDataRepository.initialBarang();
       await saveReports(reports);
     }
 
     var chats =
         _chatsBox.values.map((value) => SesiChat.fromMap(value)).toList();
-    if (chats.isEmpty) {
+    if (seedIfEmpty && chats.isEmpty) {
       chats = MockDataRepository.initialChats(reports);
       await saveChats(chats);
     }
@@ -57,7 +68,7 @@ class LocalDataRepository {
     var notifications = _notificationsBox.values
         .map((value) => NotifikasiItem.fromMap(value))
         .toList();
-    if (notifications.isEmpty) {
+    if (seedIfEmpty && notifications.isEmpty) {
       notifications = MockDataRepository.initialNotifications();
       await saveNotifications(notifications);
     }
@@ -88,6 +99,11 @@ class LocalDataRepository {
     }
   }
 
+  Future<void> saveReport(BarangItem report) async {
+    await initialize();
+    await _reportsBox.put(report.id, report.toMap());
+  }
+
   Future<void> saveChats(List<SesiChat> chats) async {
     await _chatsBox.clear();
     for (final chat in chats) {
@@ -103,5 +119,29 @@ class LocalDataRepository {
         notifications[index].toMap(),
       );
     }
+  }
+
+  Future<List<PendingUpload>> loadUploadQueue() async {
+    await initialize();
+    final queue = <PendingUpload>[];
+    for (final value in _uploadQueueBox.values) {
+      try {
+        queue.add(PendingUpload.fromMap(value));
+      } catch (error) {
+        debugPrint('Melewati item antrean upload yang rusak: $error');
+      }
+    }
+    queue.sort((a, b) => a.nextAttemptAt.compareTo(b.nextAttemptAt));
+    return queue;
+  }
+
+  Future<void> savePendingUpload(PendingUpload item) async {
+    await initialize();
+    await _uploadQueueBox.put(item.reportId, item.toMap());
+  }
+
+  Future<void> removePendingUpload(String reportId) async {
+    await initialize();
+    await _uploadQueueBox.delete(reportId);
   }
 }

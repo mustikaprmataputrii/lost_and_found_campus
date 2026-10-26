@@ -17,6 +17,16 @@ class ApiConfig {
   }
 }
 
+class ApiException implements Exception {
+  final int statusCode;
+  final String message;
+
+  const ApiException(this.statusCode, this.message);
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   final http.Client _client;
 
@@ -40,7 +50,9 @@ class ApiService {
     final decoded = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map ? decoded['error'] : null;
-      throw Exception(message ?? 'API request failed (${response.statusCode})');
+      final errorMessage =
+          message ?? 'API request failed (${response.statusCode})';
+      throw ApiException(response.statusCode, '$errorMessage');
     }
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Response API tidak valid.');

@@ -1,22 +1,43 @@
 part of '../../main.dart';
 
 class AppDataRepository {
-  final LocalDataRepository _local = LocalDataRepository();
-  final ApiService _remote = ApiService();
+  final LocalDataRepository _local;
+  final ApiService _remote;
+
+  AppDataRepository({LocalDataRepository? local, ApiService? remote})
+      : _local = local ?? LocalDataRepository(),
+        _remote = remote ?? ApiService();
 
   Future<LocalDataSnapshot> load({required String email}) async {
     try {
       final remoteData = await _remote.load(email: email);
-      await _local.saveAll(
-        reports: remoteData.reports,
-        chats: remoteData.chats,
-        notifications: remoteData.notifications,
-      );
+      try {
+        await _local.saveAll(
+          reports: remoteData.reports,
+          chats: remoteData.chats,
+          notifications: remoteData.notifications,
+        );
+      } catch (error) {
+        // Cache adalah lapisan pendukung; data server tetap yang paling baru.
+        debugPrint('Gagal memperbarui cache lokal: $error');
+      }
       return remoteData;
-    } catch (_) {
-      // Server adalah sumber data bersama. Jangan mengembalikan cache akun
-      // sebelumnya ketika API sedang offline.
-      rethrow;
+    } catch (error, stackTrace) {
+      try {
+        final cached = await _local.load(seedIfEmpty: false);
+        if (cached.hasAnyData) {
+          return LocalDataSnapshot(
+            reports: cached.reports,
+            chats: cached.chats,
+            notifications: cached.notifications,
+            users: cached.users,
+            fromCache: true,
+          );
+        }
+      } catch (cacheError) {
+        debugPrint('Gagal membaca cache lokal: $cacheError');
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -27,22 +48,45 @@ class AppDataRepository {
     required List<SesiChat> chats,
     required List<NotifikasiItem> notifications,
   }) async {
-    await _local.saveAll(
-      reports: reports,
-      chats: chats,
-      notifications: notifications,
-    );
-
     try {
-      await _remote.saveAll(
-        email: email,
-        nama: nama,
+      await _local.saveAll(
         reports: reports,
         chats: chats,
         notifications: notifications,
       );
-    } catch (_) {
-      // Cache lokal tetap menjadi fallback ketika API sedang offline.
+    } catch (error) {
+      // Kegagalan cache tidak boleh menghalangi penyimpanan ke server.
+      debugPrint('Gagal menyimpan cache lokal: $error');
+    }
+
+    // Error server harus sampai ke pemanggil agar UI dapat meminta pengguna
+    // mencoba lagi, bukan menampilkan status berhasil palsu.
+    await _remote.saveAll(
+      email: email,
+      nama: nama,
+      reports: reports,
+      chats: chats,
+      notifications: notifications,
+    );
+  }
+
+  Future<void> createReport({
+    required String email,
+    required String nama,
+    required BarangItem report,
+  }) async {
+    await _remote.saveAll(
+      email: email,
+      nama: nama,
+      reports: [report],
+      chats: const <SesiChat>[],
+      notifications: const <NotifikasiItem>[],
+    );
+
+    try {
+      await _local.saveReport(report);
+    } catch (error) {
+      debugPrint('Gagal menyimpan laporan baru ke cache lokal: $error');
     }
   }
 
