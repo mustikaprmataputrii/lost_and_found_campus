@@ -74,6 +74,78 @@ class BarangItem {
   }
 }
 
+class PendingUpload {
+  final String reportId;
+  final String email;
+  final String nama;
+  final BarangItem report;
+  final int attempts;
+  final DateTime nextAttemptAt;
+  final String? lastError;
+
+  const PendingUpload({
+    required this.reportId,
+    required this.email,
+    required this.nama,
+    required this.report,
+    required this.attempts,
+    required this.nextAttemptAt,
+    this.lastError,
+  });
+
+  PendingUpload copyWith({
+    int? attempts,
+    DateTime? nextAttemptAt,
+    String? lastError,
+  }) =>
+      PendingUpload(
+        reportId: reportId,
+        email: email,
+        nama: nama,
+        report: report,
+        attempts: attempts ?? this.attempts,
+        nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+        lastError: lastError ?? this.lastError,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'reportId': reportId,
+        'email': email,
+        'nama': nama,
+        'report': report.toMap(),
+        'attempts': attempts,
+        'nextAttemptAt': nextAttemptAt.toIso8601String(),
+        'lastError': lastError,
+      };
+
+  static PendingUpload fromMap(Map<dynamic, dynamic> raw) {
+    final reportRaw = raw['report'];
+    if (reportRaw is! Map) {
+      throw const FormatException('Data antrean upload tidak valid.');
+    }
+    final report = BarangItem.fromMap(
+      Map<dynamic, dynamic>.from(reportRaw),
+    );
+    return PendingUpload(
+      reportId: '${raw['reportId'] ?? report.id}',
+      email: '${raw['email'] ?? ''}',
+      nama: '${raw['nama'] ?? ''}',
+      report: report,
+      attempts: (raw['attempts'] as num?)?.toInt() ?? 0,
+      nextAttemptAt:
+          DateTime.tryParse('${raw['nextAttemptAt']}') ?? DateTime.now(),
+      lastError: raw['lastError'] == null ? null : '${raw['lastError']}',
+    );
+  }
+}
+
+class ReportSubmissionResult {
+  final bool uploaded;
+
+  const ReportSubmissionResult.uploaded() : uploaded = true;
+  const ReportSubmissionResult.queued() : uploaded = false;
+}
+
 class PesanChat {
   final String? id;
   final String pengirim;

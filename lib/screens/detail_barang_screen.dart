@@ -31,7 +31,17 @@ class DetailBarangScreen extends StatelessWidget {
       ),
     );
     if (confirmed != true || onDelete == null) return;
-    await onDelete!();
+    try {
+      await onDelete!();
+    } catch (error) {
+      if (context.mounted) {
+        final message = error.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Laporan gagal dihapus. $message'),
+            behavior: SnackBarBehavior.floating));
+      }
+      return;
+    }
     if (context.mounted) Navigator.pop(context);
   }
 

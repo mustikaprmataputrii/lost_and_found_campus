@@ -10,6 +10,7 @@ class JelajahScreen extends StatefulWidget {
   final Future<void> Function()? onRefresh;
   final int unreadNotificationCount;
   final VoidCallback onNotificationsTap;
+  final int pendingUploadCount;
   const JelajahScreen(
       {super.key,
       required this.daftarBarang,
@@ -20,7 +21,8 @@ class JelajahScreen extends StatefulWidget {
       this.onDelete,
       this.onRefresh,
       required this.unreadNotificationCount,
-      required this.onNotificationsTap});
+      required this.onNotificationsTap,
+      this.pendingUploadCount = 0});
   @override
   State<JelajahScreen> createState() => _JelajahScreenState();
 }
@@ -74,6 +76,26 @@ class _JelajahScreenState extends State<JelajahScreen> {
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
             children: [
               _buildHero(),
+              if (widget.pendingUploadCount > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                        color: UINColors.gold.withValues(alpha: .18),
+                        borderRadius: BorderRadius.circular(16)),
+                    child: Row(children: [
+                      const Icon(Icons.cloud_upload_outlined,
+                          color: UINColors.deep, size: 19),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: Text(
+                              '${widget.pendingUploadCount} laporan menunggu koneksi untuk dikirim otomatis.',
+                              style: const TextStyle(
+                                  color: UINColors.deep,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)))
+                    ])),
+              ],
               const SizedBox(height: 20),
               Row(children: [
                 const Text('Temuan terbaru',

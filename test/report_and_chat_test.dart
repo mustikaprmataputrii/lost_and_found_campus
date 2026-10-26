@@ -36,7 +36,8 @@ void main() {
         MaterialApp(
           home: LaporBarangScreen(
             defaultNama: 'Mahasiswa Uji',
-            onLaporanDibuat: (_) {},
+            onLaporanDibuat: (_) async =>
+                const ReportSubmissionResult.uploaded(),
           ),
         ),
       );
@@ -61,7 +62,10 @@ void main() {
         MaterialApp(
           home: LaporBarangScreen(
             defaultNama: 'Mahasiswa Uji',
-            onLaporanDibuat: (laporan) => laporanTerkirim = laporan,
+            onLaporanDibuat: (laporan) async {
+              laporanTerkirim = laporan;
+              return const ReportSubmissionResult.uploaded();
+            },
           ),
         ),
       );
@@ -102,13 +106,151 @@ void main() {
           findsOneWidget);
     });
 
+    testWidgets('form laporan mengosongkan isi saat masuk antrean',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LaporBarangScreen(
+            defaultNama: 'Mahasiswa Uji',
+            onLaporanDibuat: (_) async => const ReportSubmissionResult.queued(),
+          ),
+        ),
+      );
+
+      Future<void> fillField(String label, String value) async {
+        final labelFinder = find.text(label);
+        await tester.scrollUntilVisible(
+          labelFinder,
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final field = find
+            .ancestor(of: labelFinder, matching: find.byType(TextFormField))
+            .first;
+        await tester.enterText(field, value);
+      }
+
+      await fillField('Nama barang', 'Dompet hitam');
+      await fillField('Lokasi di kampus', 'Gedung Rektorat');
+      await fillField(
+          'Ciri-ciri dan detail', 'Ada kartu mahasiswa di dalamnya');
+      await fillField('Nomor WhatsApp aktif', '081234567890');
+
+      final submitButton = find.text('TERBITKAN LAPORAN');
+      await tester.scrollUntilVisible(
+        submitButton,
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text(
+              'Laporan disimpan dan akan dikirim otomatis saat koneksi tersedia.'),
+          findsOneWidget);
+      final fields =
+          tester.widgetList<TextFormField>(find.byType(TextFormField)).toList();
+      expect(fields[0].controller?.text, isEmpty);
+      expect(fields[1].controller?.text, isEmpty);
+      expect(find.text('TERBITKAN LAPORAN'), findsOneWidget);
+    });
+
+    testWidgets('form laporan mempertahankan isi saat upload gagal',
+        (tester) async {
+      final submittedIds = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LaporBarangScreen(
+            defaultNama: 'Mahasiswa Uji',
+            onLaporanDibuat: (laporan) async {
+              submittedIds.add(laporan.id);
+              throw Exception('Server offline');
+            },
+          ),
+        ),
+      );
+
+      Future<void> fillField(String label, String value) async {
+        final labelFinder = find.text(label);
+        await tester.scrollUntilVisible(
+          labelFinder,
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        final field = find
+            .ancestor(of: labelFinder, matching: find.byType(TextFormField))
+            .first;
+        await tester.enterText(field, value);
+      }
+
+      await fillField('Nama barang', 'Dompet hitam');
+      await fillField('Lokasi di kampus', 'Gedung Rektorat');
+      await fillField(
+          'Ciri-ciri dan detail', 'Ada kartu mahasiswa di dalamnya');
+      await fillField('Nomor WhatsApp aktif', '081234567890');
+
+      final submitButton = find.text('TERBITKAN LAPORAN');
+      await tester.scrollUntilVisible(
+        submitButton,
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(submitButton);
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text('Laporan gagal dikirim. Server offline'), findsOneWidget);
+      final fields =
+          tester.widgetList<TextFormField>(find.byType(TextFormField)).toList();
+      expect(fields[0].controller?.text, 'Dompet hitam');
+      expect(fields[1].controller?.text, 'Gedung Rektorat');
+      expect(find.text('TERBITKAN LAPORAN'), findsOneWidget);
+
+      // Tunggu SnackBar error hilang agar tombol tidak terhalang overlay.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('TERBITKAN LAPORAN'));
+      await tester.pumpAndSettle();
+
+      expect(submittedIds, hasLength(2));
+      expect(submittedIds[0], submittedIds[1]);
+    });
+
+    testWidgets('detail tetap terbuka saat hapus laporan gagal',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DetailBarangScreen(
+            item: _barangUji(),
+            currentUserEmail: 'owner@student.uin-malang.ac.id',
+            onKlaim: () {},
+            onDelete: () async {
+              throw Exception('Server offline');
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hapus'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detail laporan'), findsOneWidget);
+      expect(
+          find.text('Laporan gagal dihapus. Server offline'), findsOneWidget);
+    });
+
     testWidgets('pilihan sumber foto menampilkan kamera dan galeri',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: LaporBarangScreen(
             defaultNama: 'Mahasiswa Uji',
-            onLaporanDibuat: (_) {},
+            onLaporanDibuat: (_) async =>
+                const ReportSubmissionResult.uploaded(),
           ),
         ),
       );

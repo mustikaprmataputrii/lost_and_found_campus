@@ -949,16 +949,22 @@ $notifications = [];
 try {
     $db->begin_transaction();
 
+    // Snapshot klien hanya boleh memperbarui laporan miliknya sendiri.
+    // Baris dengan user_email NULL (data lama) tidak otomatis diklaim.
     $reportStatement = $db->prepare(
         'INSERT INTO reports
           (id, nama, lokasi, deskripsi, jenis, pelapor, kontak, tanggal, foto,
            status, user_email)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
-           nama = VALUES(nama), lokasi = VALUES(lokasi),
-           deskripsi = VALUES(deskripsi), jenis = VALUES(jenis),
-           pelapor = VALUES(pelapor), kontak = VALUES(kontak),
-            tanggal = VALUES(tanggal), foto = VALUES(foto)',
+           nama = IF(user_email = VALUES(user_email), VALUES(nama), nama),
+           lokasi = IF(user_email = VALUES(user_email), VALUES(lokasi), lokasi),
+           deskripsi = IF(user_email = VALUES(user_email), VALUES(deskripsi), deskripsi),
+           jenis = IF(user_email = VALUES(user_email), VALUES(jenis), jenis),
+           pelapor = IF(user_email = VALUES(user_email), VALUES(pelapor), pelapor),
+           kontak = IF(user_email = VALUES(user_email), VALUES(kontak), kontak),
+           tanggal = IF(user_email = VALUES(user_email), VALUES(tanggal), tanggal),
+           foto = IF(user_email = VALUES(user_email), VALUES(foto), foto)',
     );
 
     foreach ($reports as $report) {

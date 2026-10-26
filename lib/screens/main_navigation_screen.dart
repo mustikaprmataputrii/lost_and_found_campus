@@ -26,6 +26,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   final List<BarangItem> _daftarBarang = [];
   final List<SesiChat> _daftarSesiChat = [];
   final List<NotifikasiItem> _notifikasi = [];
+  final ReportUploadQueue _uploadQueue = ReportUploadQueue();
+  int _pendingUploadCount = 0;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<void> _siapkanDataAwal() async {
     unawaited(AppDataRepository()
         .updatePresence(email: widget.email, isOnline: true));
+    await _flushUploadQueue(refresh: false);
     await _sinkronkanDariServer(showPopup: false);
     _mulaiSinkronisasiBerkala();
     await Future<void>.delayed(const Duration(milliseconds: 700));
@@ -55,6 +58,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     _syncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(AppDataRepository()
           .updatePresence(email: widget.email, isOnline: true));
+      unawaited(_flushUploadQueue(refresh: false));
       unawaited(_sinkronkanDariServer());
     });
   }
@@ -125,6 +129,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       _mulaiSinkronisasiBerkala();
       unawaited(AppDataRepository()
           .updatePresence(email: widget.email, isOnline: true));
+      unawaited(_flushUploadQueue());
     }
   }
 
@@ -158,10 +163,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       _daftarSesiChat.fold(0, (total, sesi) => total + sesi.unreadCount);
   int get _totalUnreadNotifikasi =>
       _notifikasi.where((item) => !item.isRead).length;
-  void _tambahBarang(BarangItem item) {
+  Future<ReportSubmissionResult> _tambahBarang(BarangItem item) async {
     item.pemilikEmail = widget.email;
-    setState(() => _daftarBarang.insert(0, item));
-    unawaited(_simpanData());
+    final result = await _uploadQueue.submit(
+      email: widget.email,
+      nama: widget.nama,
+      report: item,
+    );
+    if (!mounted) return result;
+
+    if (result.uploaded) {
+      setState(() => _daftarBarang.insert(0, item));
+    } else {
+      await _refreshPendingUploadCount();
+    }
+    return result;
   }
 
   Future<void> _hapusBarang(BarangItem item) async {
@@ -174,7 +190,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         behavior: SnackBarBehavior.floating));
   }
 
-  Future<void> _simpanData() {
+  Future<void> _simpanData() async {
     for (final sesi in _daftarSesiChat) {
       for (final report in _daftarBarang) {
         if (report.id == sesi.barang.id) {
@@ -183,13 +199,42 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         }
       }
     }
-    return AppDataRepository().saveAll(
-      email: widget.email,
-      nama: widget.nama,
-      reports: _daftarBarang,
-      chats: _daftarSesiChat,
-      notifications: _notifikasi,
-    );
+    try {
+      await AppDataRepository().saveAll(
+        email: widget.email,
+        nama: widget.nama,
+        reports: _daftarBarang,
+        chats: _daftarSesiChat,
+        notifications: _notifikasi,
+      );
+    } catch (error) {
+      // Ini adalah sinkronisasi latar belakang; kegagalan server tidak boleh
+      // membuat operasi UI utama berhenti atau menghasilkan unhandled error.
+      debugPrint('Gagal menyinkronkan data ke server: $error');
+    }
+  }
+
+  Future<void> _flushUploadQueue({bool refresh = true}) async {
+    try {
+      final uploaded = await _uploadQueue.flush(email: widget.email);
+      final pending = await _uploadQueue.pendingCount(email: widget.email);
+      if (!mounted) return;
+      setState(() => _pendingUploadCount = pending);
+      if (uploaded > 0 && refresh) {
+        await _sinkronkanDariServer(showPopup: false);
+      }
+    } catch (error) {
+      debugPrint('Gagal memproses antrean upload: $error');
+    }
+  }
+
+  Future<void> _refreshPendingUploadCount() async {
+    try {
+      final pending = await _uploadQueue.pendingCount(email: widget.email);
+      if (mounted) setState(() => _pendingUploadCount = pending);
+    } catch (error) {
+      debugPrint('Gagal membaca jumlah antrean upload: $error');
+    }
   }
 
   void _tampilkanPopupPesan(SesiChat sesi, PesanChat pesan) {
@@ -342,6 +387,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
   }
 
+  Future<void> _tandaiNotifikasiDibaca() async {
+    try {
+      await AppDataRepository().markNotificationsRead(email: widget.email);
+    } catch (error) {
+      // Status baca lokal tetap dipertahankan; server akan disinkronkan lagi.
+      debugPrint('Gagal menandai notifikasi dibaca: $error');
+    }
+  }
+
   Future<SesiChat?> _muatSesiTerbaru(String chatId,
       {bool markRead = true}) async {
     if (markRead) await _tandaiChatDibaca(chatId);
@@ -370,7 +424,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         item.isRead = true;
       }
     });
-    unawaited(AppDataRepository().markNotificationsRead(email: widget.email));
+    unawaited(_tandaiNotifikasiDibaca());
     showModalBottomSheet<void>(
         context: context,
         backgroundColor: UINColors.sand,
@@ -481,7 +535,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           onDelete: _hapusBarang,
           onRefresh: () => _sinkronkanDariServer(showPopup: false),
           unreadNotificationCount: _totalUnreadNotifikasi,
-          onNotificationsTap: _bukaNotifikasi),
+          onNotificationsTap: _bukaNotifikasi,
+          pendingUploadCount: _pendingUploadCount),
       LaporBarangScreen(
           onLaporanDibuat: _tambahBarang, defaultNama: widget.nama),
       DaftarChatScreen(daftarSesi: _daftarSesiChat, onSesiTap: _bukaChat),
