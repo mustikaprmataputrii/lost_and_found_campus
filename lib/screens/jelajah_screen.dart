@@ -11,6 +11,7 @@ class JelajahScreen extends StatefulWidget {
   final int unreadNotificationCount;
   final VoidCallback onNotificationsTap;
   final int pendingUploadCount;
+  final bool isUsingCache;
   const JelajahScreen(
       {super.key,
       required this.daftarBarang,
@@ -22,7 +23,8 @@ class JelajahScreen extends StatefulWidget {
       this.onRefresh,
       required this.unreadNotificationCount,
       required this.onNotificationsTap,
-      this.pendingUploadCount = 0});
+      this.pendingUploadCount = 0,
+      this.isUsingCache = false});
   @override
   State<JelajahScreen> createState() => _JelajahScreenState();
 }
@@ -91,6 +93,26 @@ class _JelajahScreenState extends State<JelajahScreen> {
                           child: Text(
                               '${widget.pendingUploadCount} laporan menunggu koneksi untuk dikirim otomatis.',
                               style: const TextStyle(
+                                  color: UINColors.deep,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700)))
+                    ])),
+              ],
+              if (widget.isUsingCache) ...[
+                const SizedBox(height: 12),
+                Container(
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                        color: UINColors.mint,
+                        borderRadius: BorderRadius.circular(16)),
+                    child: const Row(children: [
+                      Icon(Icons.cloud_off_outlined,
+                          color: UINColors.primary, size: 19),
+                      SizedBox(width: 10),
+                      Expanded(
+                          child: Text(
+                              'Menampilkan data tersimpan. Data akan diperbarui saat server terhubung.',
+                              style: TextStyle(
                                   color: UINColors.deep,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700)))

@@ -9,14 +9,16 @@ class AppDataRepository {
         _remote = remote ?? ApiService();
 
   Future<LocalDataSnapshot> load({required String email}) async {
+    final owner = _normalizeEmail(email);
     try {
-      final remoteData = await _remote.load(email: email);
+      final remoteData = await _remote.load(email: owner);
       try {
         await _local.saveAll(
           reports: remoteData.reports,
           chats: remoteData.chats,
           notifications: remoteData.notifications,
         );
+        await _local.markCacheOwner(owner);
       } catch (error) {
         // Cache adalah lapisan pendukung; data server tetap yang paling baru.
         debugPrint('Gagal memperbarui cache lokal: $error');
@@ -24,20 +26,41 @@ class AppDataRepository {
       return remoteData;
     } catch (error, stackTrace) {
       try {
-        final cached = await _local.load(seedIfEmpty: false);
-        if (cached.hasAnyData) {
-          return LocalDataSnapshot(
-            reports: cached.reports,
-            chats: cached.chats,
-            notifications: cached.notifications,
-            users: cached.users,
-            fromCache: true,
-          );
+        if (await _local.matchesCacheOwner(owner)) {
+          final cached = await _local.load(seedIfEmpty: false);
+          if (cached.hasAnyData) {
+            return LocalDataSnapshot(
+              reports: cached.reports,
+              chats: cached.chats,
+              notifications: cached.notifications,
+              users: cached.users,
+              fromCache: true,
+            );
+          }
         }
       } catch (cacheError) {
         debugPrint('Gagal membaca cache lokal: $cacheError');
       }
       Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  Future<LocalDataSnapshot?> loadCache({required String email}) async {
+    final owner = _normalizeEmail(email);
+    try {
+      if (!await _local.matchesCacheOwner(owner)) return null;
+      final cached = await _local.load(seedIfEmpty: false);
+      if (!cached.hasAnyData) return null;
+      return LocalDataSnapshot(
+        reports: cached.reports,
+        chats: cached.chats,
+        notifications: cached.notifications,
+        users: cached.users,
+        fromCache: true,
+      );
+    } catch (error) {
+      debugPrint('Gagal memulihkan cache lokal: $error');
+      return null;
     }
   }
 
@@ -54,6 +77,7 @@ class AppDataRepository {
         chats: chats,
         notifications: notifications,
       );
+      await _local.markCacheOwner(email);
     } catch (error) {
       // Kegagalan cache tidak boleh menghalangi penyimpanan ke server.
       debugPrint('Gagal menyimpan cache lokal: $error');
@@ -85,6 +109,7 @@ class AppDataRepository {
 
     try {
       await _local.saveReport(report);
+      await _local.markCacheOwner(email);
     } catch (error) {
       debugPrint('Gagal menyimpan laporan baru ke cache lokal: $error');
     }
@@ -201,4 +226,6 @@ class AppDataRepository {
   }) {
     return _remote.deleteAdminUser(token: token, email: email);
   }
+
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
 }

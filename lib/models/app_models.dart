@@ -4,6 +4,24 @@ enum JenisLaporan { ditemukan, hilang }
 
 enum StatusBarang { belumDiklaim, prosesKlaim, selesai }
 
+class AuthSession {
+  final String email;
+  final String nim;
+  final String nama;
+  final LoginRole role;
+  final String? adminToken;
+
+  const AuthSession({
+    required this.email,
+    required this.nim,
+    required this.nama,
+    required this.role,
+    this.adminToken,
+  });
+
+  bool get isAdmin => role == LoginRole.admin;
+}
+
 class BarangItem {
   final String id;
   final String nama;
@@ -144,6 +162,63 @@ class ReportSubmissionResult {
 
   const ReportSubmissionResult.uploaded() : uploaded = true;
   const ReportSubmissionResult.queued() : uploaded = false;
+}
+
+class ReportDraft {
+  final String email;
+  final String nama;
+  final String lokasi;
+  final String deskripsi;
+  final String kontak;
+  final JenisLaporan jenis;
+  final Uint8List? fotoBytes;
+  final DateTime updatedAt;
+
+  const ReportDraft({
+    required this.email,
+    required this.nama,
+    required this.lokasi,
+    required this.deskripsi,
+    required this.kontak,
+    required this.jenis,
+    this.fotoBytes,
+    required this.updatedAt,
+  });
+
+  bool get isEmpty =>
+      nama.trim().isEmpty &&
+      lokasi.trim().isEmpty &&
+      deskripsi.trim().isEmpty &&
+      kontak.trim().isEmpty &&
+      fotoBytes == null;
+
+  Map<String, dynamic> toMap() => {
+        'email': email,
+        'nama': nama,
+        'lokasi': lokasi,
+        'deskripsi': deskripsi,
+        'kontak': kontak,
+        'jenis': jenis.name,
+        'foto': fotoBytes == null ? null : base64Encode(fotoBytes!),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  static ReportDraft fromMap(Map<dynamic, dynamic> raw) {
+    final foto = raw['foto'];
+    return ReportDraft(
+      email: '${raw['email'] ?? ''}',
+      nama: '${raw['nama'] ?? ''}',
+      lokasi: '${raw['lokasi'] ?? ''}',
+      deskripsi: '${raw['deskripsi'] ?? ''}',
+      kontak: '${raw['kontak'] ?? ''}',
+      jenis: JenisLaporan.values.firstWhere(
+        (item) => item.name == raw['jenis'],
+        orElse: () => JenisLaporan.ditemukan,
+      ),
+      fotoBytes: foto is String && foto.isNotEmpty ? base64Decode(foto) : null,
+      updatedAt: DateTime.tryParse('${raw['updatedAt']}') ?? DateTime.now(),
+    );
+  }
 }
 
 class PesanChat {

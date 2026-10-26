@@ -2,11 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lost_and_found_campus/main.dart';
 
 class _FakeLocal extends LocalDataRepository {
-  _FakeLocal({this.cached});
+  _FakeLocal({this.cached, this.cacheOwned = true});
 
   final LocalDataSnapshot? cached;
   bool saveAllCalled = false;
   bool saveReportCalled = false;
+  bool cacheOwned;
+
+  @override
+  Future<void> markCacheOwner(String email) async {
+    cacheOwned = true;
+  }
+
+  @override
+  Future<bool> matchesCacheOwner(String email) async => cacheOwned;
 
   @override
   Future<LocalDataSnapshot> load({bool seedIfEmpty = true}) async {
@@ -114,6 +123,49 @@ void main() {
       expect(result.fromCache, isTrue);
       expect(result.reports, hasLength(1));
       expect(result.reports.single.nama, 'Kunci uji');
+    });
+
+    test('load tidak memakai cache milik akun lain', () async {
+      final local = _FakeLocal(
+        cached: LocalDataSnapshot(
+          reports: [_barangUji()],
+          chats: const [],
+          notifications: const [],
+        ),
+        cacheOwned: false,
+      );
+      final remote = _FakeRemote(loadError: Exception('API offline'));
+      final repository = AppDataRepository(local: local, remote: remote);
+
+      await expectLater(
+        repository.load(email: 'other@student.uin-malang.ac.id'),
+        throwsA(
+          predicate(
+            (Object error) => error.toString().contains('API offline'),
+          ),
+        ),
+      );
+    });
+
+    test('loadCache mengembalikan null saat cache milik akun lain', () async {
+      final local = _FakeLocal(
+        cached: LocalDataSnapshot(
+          reports: [_barangUji()],
+          chats: const [],
+          notifications: const [],
+        ),
+        cacheOwned: false,
+      );
+      final repository = AppDataRepository(
+        local: local,
+        remote: _FakeRemote(),
+      );
+
+      final result = await repository.loadCache(
+        email: 'other@student.uin-malang.ac.id',
+      );
+
+      expect(result, isNull);
     });
 
     test('load meneruskan error API saat cache kosong', () async {

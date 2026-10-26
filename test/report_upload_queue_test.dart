@@ -26,6 +26,9 @@ class _QueueLocal extends LocalDataRepository {
   Future<void> saveReport(BarangItem report) async {
     saveReportCalled = true;
   }
+
+  @override
+  Future<void> markCacheOwner(String email) async {}
 }
 
 class _QueueRemote extends ApiService {

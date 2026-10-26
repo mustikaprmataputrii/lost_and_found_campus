@@ -22,7 +22,7 @@ class ReportUploadQueue {
         chats: const <SesiChat>[],
         notifications: const <NotifikasiItem>[],
       );
-      await _saveLocal(report);
+      await _saveLocal(report, email);
       return const ReportSubmissionResult.uploaded();
     } catch (error) {
       if (!_isRetryable(error)) rethrow;
@@ -67,7 +67,7 @@ class ReportUploadQueue {
             chats: const <SesiChat>[],
             notifications: const <NotifikasiItem>[],
           );
-          await _saveLocal(item.report);
+          await _saveLocal(item.report, item.email);
           await _local.removePendingUpload(item.reportId);
           uploaded++;
         } catch (error) {
@@ -101,9 +101,10 @@ class ReportUploadQueue {
     return queue.where((item) => item.email == email).length;
   }
 
-  Future<void> _saveLocal(BarangItem report) async {
+  Future<void> _saveLocal(BarangItem report, String email) async {
     try {
       await _local.saveReport(report);
+      await _local.markCacheOwner(email);
     } catch (error) {
       debugPrint('Gagal menyimpan laporan ke cache lokal: $error');
     }
