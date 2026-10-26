@@ -81,8 +81,9 @@ menghantam server. Item berikutnya dicoba pada siklus berikutnya.
 - Item yang gagal permanen (4xx) dihapus dari antrean dan dicatat di log, belum
   ditampilkan sebagai daftar gagal permanen.
 - Belum ada halaman khusus untuk melihat detail isi antrean.
-- State recovery penuh (draft form, auto-login, cold-start restoration) dan
-  candidate matching belum termasuk dalam tahap ini.
+- State recovery sudah tersedia untuk sesi, draft laporan, dan cold-start cache;
+  detailnya ada di `docs/STATE_RECOVERY.md`.
+- Candidate matching belum termasuk dalam tahap ini.
 
 ## 7. Verifikasi
 
@@ -108,6 +109,7 @@ menghantam server. Item berikutnya dicoba pada siklus berikutnya.
 ## 8. Langkah berikutnya
 
 1. Uji lifecycle nyata di emulator/perangkat: pause, resume, matikan proses.
-2. State recovery: draft laporan dan pemulihan sesi.
+2. ~~State recovery: draft laporan dan pemulihan sesi.~~ Selesai; lihat
+   `docs/STATE_RECOVERY.md`.
 3. Candidate matching hilang/temuan dengan skor dan evaluasi.
 4. Opsi background worker bila diperlukan untuk klaim judul yang lebih kuat.

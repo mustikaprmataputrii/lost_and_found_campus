@@ -28,6 +28,9 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 - Cache lokal menggunakan Hive sebagai buffer penulisan perangkat, sedangkan server menjadi sumber data bersama.
 - Antrean upload lokal dengan retry dan backoff saat jaringan atau server bermasalah.
 - Fallback cache Hive saat API sementara tidak dapat diakses.
+- Pemulihan sesi mahasiswa/admin saat aplikasi dibuka kembali.
+- Draft laporan tersimpan otomatis per akun, termasuk foto dan jenis laporan.
+- Cold-start cache menampilkan data tersimpan lebih dulu sebelum sinkronisasi server.
 - Sinkronisasi berkala memperbarui laporan, chat, notifikasi, dan status kehadiran pengguna.
 - Dukungan target Flutter Web, Android, iOS, Windows, macOS, dan Linux sesuai ketersediaan toolchain perangkat.
 
@@ -49,16 +52,43 @@ Flutter UI
    |             +-- Hive cache/fallback
    |
    +-- ReportUploadQueue
+   |      |
+   |      +-- ApiService
+   |      +-- Hive outbox (retry)
+   |
+   +-- AuthGateScreen / AuthService
+   |      |
+   |      +-- SharedPreferences (sesi login)
+   |
+   +-- ReportDraftService
           |
-          +-- ApiService
-          +-- Hive outbox (retry)
+          +-- Hive draft box (per email)
 ```
 
 Aplikasi mengambil data bersama dari backend MySQL melalui REST API. Cache Hive
-dipakai sebagai buffer penulisan perangkat dan fallback saat backend gagal
-diakses. Laporan yang gagal dikirim karena masalah jaringan disimpan di outbox
-Hive, lalu dicoba ulang saat aplikasi aktif kembali. Cache tidak digunakan untuk
-menampilkan data akun lain; antrean juga difilter berdasarkan email akun aktif.
+dipakai sebagai buffer penulisan perangkat, fallback saat backend gagal diakses,
+dan sumber data awal pada cold start. Laporan yang gagal dikirim karena masalah
+jaringan disimpan di outbox Hive, lalu dicoba ulang saat aplikasi aktif kembali.
+Cache diberi penanda pemilik email sehingga snapshot akun lain tidak ditampilkan
+ke akun yang sedang aktif; antrean upload juga difilter berdasarkan email.
+
+## Pemulihan state
+
+- `AuthGateScreen` membaca sesi tersimpan sebelum menampilkan halaman utama.
+  Sesi mahasiswa dipulihkan ke dashboard; sesi admin dipulihkan bila token admin
+  masih tersimpan. Logout menghapus kunci autentikasi dan timer sesi, tetapi
+  tidak menghapus preferensi lain.
+- `ReportDraftService` menyimpan draft laporan per email di Hive. Perubahan form
+  disimpan otomatis setelah jeda singkat; draft dipulihkan dengan banner
+  “Draft laporan dipulihkan” dan dapat dihapus manual. Draft dihapus setelah
+  laporan berhasil dikirim atau masuk antrean upload.
+- `AppDataRepository.loadCache` menampilkan snapshot Hive terakhir lebih dulu
+  saat cold start. Snapshot hanya dipakai bila penanda pemilik email cocok,
+  lalu diganti data server setelah sinkronisasi berhasil. Selama data berasal
+  dari cache, halaman Jelajah menampilkan banner data tersimpan.
+
+Pemulihan sesi ini adalah pemulihan identitas lokal, bukan pengganti autentikasi
+server. Login mahasiswa tetap divalidasi oleh backend saat pertama kali masuk.
 
 ## Struktur folder penting
 
@@ -73,9 +103,11 @@ lib/
 │   ├── local_data_repository.dart
 │   └── mock_data_repository.dart
 ├── screens/                   # Halaman login, dashboard, laporan, chat, profil
+│   └── auth_gate_screen.dart  # Pemulihan sesi saat aplikasi dibuka
 ├── services/
 │   ├── api_service.dart       # Komunikasi Flutter dengan REST API
 │   ├── app_services.dart      # Auth dan session service
+│   ├── report_draft_service.dart # Draft laporan per akun
 │   └── report_upload_queue.dart # Antrean upload, retry, dan backoff
 ├── widgets/                   # Komponen UI yang digunakan bersama
 └── main.dart                  # Entry point dan registrasi modul
@@ -378,6 +410,7 @@ php -l backend/public/api/index.php
 
 - [Audit baseline dan perbaikan fondasi](docs/AUDIT_BASELINE_FONDASI.md)
 - [Lifecycle-aware upload queue dan retry](docs/LIFECYCLE_UPLOAD_QUEUE.md)
+- [Pemulihan state, sesi, dan draft](docs/STATE_RECOVERY.md)
 - [Laporan Tahap 4–5](docs/Laporan_Tahap_4_dan_5_TEMU_UIN_Malang.docx)
 
 ## Status implementasi MVP
@@ -390,14 +423,15 @@ Project telah memenuhi fungsi utama MVP:
 - Validasi input email kampus dan form laporan telah diterapkan.
 - Data laporan, chat, pesan, dan notifikasi dikelola melalui repository.
 - Backend REST API dan database MySQL telah tersedia.
-- Penyimpanan lokal Hive tersedia sebagai buffer perangkat tanpa mencampurkan data antar akun.
+- Penyimpanan lokal Hive tersedia sebagai buffer perangkat dengan penanda pemilik email.
 - Identitas email, NIM, dan nama dikunci di database; perubahan identitas pada email yang sama ditolak.
 - Laporan milik akun lain, anggota chat, notifikasi pesan, dan presence dibaca dari database bersama.
 - Antrean upload lifecycle-aware menyimpan laporan yang gagal terkirim dan mencoba ulang dengan backoff.
+- Sesi mahasiswa/admin, draft laporan, dan snapshot cache dipulihkan saat aplikasi dibuka kembali.
 - Error API membawa status HTTP sehingga kegagalan validasi tidak diulang terus.
 - Flutter analyze terakhir: lulus (`No issues found`) pada 26 Oktober 2026.
 - PHP lint untuk `backend/config.php` dan `backend/public/api/index.php`: lulus.
-- Terdapat 31 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, antrean upload, dan smoke test. Eksekusi ulang pada 26 Oktober 2026 lulus (`All tests passed`).
+- Terdapat 42 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, antrean upload, pemulihan sesi, draft, cache, dan smoke test. Eksekusi ulang pada 26 Oktober 2026 lulus (`All tests passed`).
 - Uji backend live pada 26 Oktober 2026: health API berhasil, insert/update laporan oleh pemilik berhasil, dan akun lain tidak dapat menimpa laporan.
 - Build Web pernah berhasil; ulangi setelah perubahan final.
 - APK uji Android pernah dibangun, tetapi masih memakai debug signing dan URL dev tunnel. APK tersebut belum siap untuk distribusi resmi; build release final perlu diulang pada environment yang bersih.
@@ -410,7 +444,9 @@ Project telah memenuhi fungsi utama MVP:
 - Backend Laragon ditujukan untuk development/demo. Deployment publik memerlukan hosting, HTTPS, pengamanan credential, dan konfigurasi server produksi.
 - Antrean upload berjalan saat aplikasi foreground/aktif. Background worker OS dan listener konektivitas khusus belum diterapkan.
 - Item antrean yang gagal permanen (4xx) dihapus dan dicatat di log; belum ada halaman daftar kegagalan permanen.
-- State recovery penuh (draft form dan auto-login) serta candidate matching hilang/temuan belum diterapkan.
+- Pemulihan sesi bersifat lokal; sesi mahasiswa belum memakai token server yang kedaluwarsa, dan sesi admin bergantung pada validitas token yang tersimpan.
+- Draft laporan tersimpan di perangkat, belum disinkronkan ke server atau perangkat lain.
+- Candidate matching hilang/temuan belum diterapkan.
 - Uji calon pengguna, APK final, video, dan bahan presentasi masih harus dilengkapi. Jangan mengisi hasil uji pengguna tanpa sesi uji yang benar-benar dilakukan.
 
 ## Lisensi dan penggunaan
