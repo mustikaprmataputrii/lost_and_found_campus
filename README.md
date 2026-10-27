@@ -18,6 +18,8 @@ Project ini dibuat menggunakan Flutter dan memiliki backend REST API berbasis PH
 - Pembuatan laporan barang.
 - Upload foto langsung dari kamera atau galeri.
 - Detail barang dan pembukaan sesi chat klaim.
+- Candidate matching laporan hilang/temuan dengan skor, alasan, dan batas tiga
+  kandidat teratas.
 - Chat dengan status online/last seen.
 - Popup notifikasi pesan masuk.
 - Badge jumlah pesan dan pemberitahuan.
@@ -61,8 +63,12 @@ Flutter UI
    |      +-- SharedPreferences (sesi login)
    |
    +-- ReportDraftService
+   |      |
+   |      +-- Hive draft box (per email)
+   |
+   +-- CandidateMatchingService
           |
-          +-- Hive draft box (per email)
+          +-- Skor teks, lokasi, dan waktu di perangkat
 ```
 
 Aplikasi mengambil data bersama dari backend MySQL melalui REST API. Cache Hive
@@ -90,6 +96,21 @@ ke akun yang sedang aktif; antrean upload juga difilter berdasarkan email.
 Pemulihan sesi ini adalah pemulihan identitas lokal, bukan pengganti autentikasi
 server. Login mahasiswa tetap divalidasi oleh backend saat pertama kali masuk.
 
+## Candidate matching
+
+`CandidateMatchingService` membandingkan laporan hilang dengan laporan ditemukan
+menggunakan nama, deskripsi, lokasi, dan kedekatan tanggal. Skor akhir adalah
+kombinasi 60% kemiripan teks, 25% lokasi, dan 15% waktu. Laporan dengan skor di
+bawah `0.42` tidak ditampilkan; maksimal tiga kandidat teratas muncul di bagian
+**Kandidat cocok** pada detail laporan.
+
+Setiap kandidat menampilkan persentase, alasan seperti “Nama barang mirip” atau
+“Lokasi berdekatan”, serta dapat dibuka untuk melihat detailnya. Candidate
+matching tidak mengubah status laporan dan tidak membuat klaim otomatis.
+Pencocokan berjalan di perangkat dari data yang sudah tersinkron; tidak ada
+perubahan skema database atau endpoint API. Detail rumus dan batasan ada di
+[docs/CANDIDATE_MATCHING.md](docs/CANDIDATE_MATCHING.md).
+
 ## Struktur folder penting
 
 ```text
@@ -108,7 +129,8 @@ lib/
 │   ├── api_service.dart       # Komunikasi Flutter dengan REST API
 │   ├── app_services.dart      # Auth dan session service
 │   ├── report_draft_service.dart # Draft laporan per akun
-│   └── report_upload_queue.dart # Antrean upload, retry, dan backoff
+│   ├── report_upload_queue.dart # Antrean upload, retry, dan backoff
+│   └── candidate_matching_service.dart # Skor kandidat hilang/temuan
 ├── widgets/                   # Komponen UI yang digunakan bersama
 └── main.dart                  # Entry point dan registrasi modul
 
@@ -411,6 +433,7 @@ php -l backend/public/api/index.php
 - [Audit baseline dan perbaikan fondasi](docs/AUDIT_BASELINE_FONDASI.md)
 - [Lifecycle-aware upload queue dan retry](docs/LIFECYCLE_UPLOAD_QUEUE.md)
 - [Pemulihan state, sesi, dan draft](docs/STATE_RECOVERY.md)
+- [Candidate matching laporan hilang/temuan](docs/CANDIDATE_MATCHING.md)
 - [Laporan Tahap 4–5](docs/Laporan_Tahap_4_dan_5_TEMU_UIN_Malang.docx)
 
 ## Status implementasi MVP
@@ -428,10 +451,11 @@ Project telah memenuhi fungsi utama MVP:
 - Laporan milik akun lain, anggota chat, notifikasi pesan, dan presence dibaca dari database bersama.
 - Antrean upload lifecycle-aware menyimpan laporan yang gagal terkirim dan mencoba ulang dengan backoff.
 - Sesi mahasiswa/admin, draft laporan, dan snapshot cache dipulihkan saat aplikasi dibuka kembali.
+- Candidate matching hilang/temuan menampilkan maksimal tiga kandidat dengan skor dan alasan.
 - Error API membawa status HTTP sehingga kegagalan validasi tidak diulang terus.
-- Flutter analyze terakhir: lulus (`No issues found`) pada 26 Oktober 2026.
+- Flutter analyze terakhir: lulus (`No issues found`) pada 27 Oktober 2026.
 - PHP lint untuk `backend/config.php` dan `backend/public/api/index.php`: lulus.
-- Terdapat 42 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, antrean upload, pemulihan sesi, draft, cache, dan smoke test. Eksekusi ulang pada 26 Oktober 2026 lulus (`All tests passed`).
+- Terdapat 48 test otomatis untuk login, navigasi, laporan, pemilih foto, chat, antrean upload, pemulihan sesi, draft, cache, candidate matching, dan smoke test. Eksekusi ulang pada 27 Oktober 2026 lulus (`All tests passed`).
 - Uji backend live pada 26 Oktober 2026: health API berhasil, insert/update laporan oleh pemilik berhasil, dan akun lain tidak dapat menimpa laporan.
 - Build Web pernah berhasil; ulangi setelah perubahan final.
 - APK uji Android pernah dibangun, tetapi masih memakai debug signing dan URL dev tunnel. APK tersebut belum siap untuk distribusi resmi; build release final perlu diulang pada environment yang bersih.
@@ -446,7 +470,8 @@ Project telah memenuhi fungsi utama MVP:
 - Item antrean yang gagal permanen (4xx) dihapus dan dicatat di log; belum ada halaman daftar kegagalan permanen.
 - Pemulihan sesi bersifat lokal; sesi mahasiswa belum memakai token server yang kedaluwarsa, dan sesi admin bergantung pada validitas token yang tersimpan.
 - Draft laporan tersimpan di perangkat, belum disinkronkan ke server atau perangkat lain.
-- Candidate matching hilang/temuan belum diterapkan.
+- Candidate matching berbasis kata dan heuristik, belum model semantik; ambang dan bobot belum dikalibrasi dengan dataset laporan nyata.
+- Candidate matching belum mengirim notifikasi otomatis saat kandidat baru muncul.
 - Uji calon pengguna, APK final, video, dan bahan presentasi masih harus dilengkapi. Jangan mengisi hasil uji pengguna tanpa sesi uji yang benar-benar dilakukan.
 
 ## Lisensi dan penggunaan
