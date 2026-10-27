@@ -25,7 +25,7 @@ Prinsip perubahan:
 | Pemeriksaan | Hasil |
 |---|---|
 | `flutter analyze --no-pub` | Tidak ada issue |
-| `flutter test --no-pub` | 31 test lulus (13 test lama + 18 test fondasi/queue) |
+| `flutter test --no-pub` | 31 test lulus saat audit; 42 test setelah state recovery |
 | `php -l backend/public/api/index.php` | Tidak ada syntax error |
 | APK di `Downloads` | ±52 MB, package `com.example.lost_and_found_campus`, label `lost_and_found_campus`, versi 1.0.0 |
 | Isi APK | API mengarah ke dev tunnel HTTPS; release masih memakai debug signing |
@@ -46,7 +46,7 @@ data uji sudah dibersihkan.
 | F-04 | Tinggi | `POST sync` dapat menimpa laporan milik akun lain | `INSERT ... ON DUPLICATE KEY UPDATE` memperbarui kolom laporan berdasarkan `id` tanpa memeriksa `user_email` | Klien yang mengetahui ID laporan dapat mengubah isi laporan akun lain |
 | F-05 | Sedang | Konfigurasi APK belum siap distribusi | package `com.example`, label masih nama package, release memakai debug signing, API memakai dev tunnel | APK hanya cocok untuk demo/internal, belum untuk rilis resmi |
 | F-06 | Sedang | Test belum mencakup fondasi upload/offline | Test yang ada berfokus pada login, form, chat, dan klaim | Regresi pada error handling dan cache tidak terdeteksi |
-| F-07 | Sebagian | Fitur judul jurnal belum lengkap | Lifecycle-aware upload queue sudah ditambahkan; state recovery dan candidate matching belum | Dua fitur judul masih menjadi pekerjaan tahap berikutnya |
+| F-07 | Sebagian | Fitur judul jurnal belum lengkap | Lifecycle-aware upload queue dan state recovery sudah ditambahkan; candidate matching belum | Satu fitur judul masih menjadi pekerjaan tahap berikutnya |
 | F-08 | Sedang | Error hapus laporan dan tandai notifikasi tidak tertangani | `DetailBarangScreen._konfirmasiHapus` memanggil `onDelete` tanpa `try/catch`; `_bukaNotifikasi` memakai `unawaited` pada API | Berpotensi menjadi unhandled asynchronous error saat server offline |
 
 ## 4. Ruang lingkup patch fondasi
@@ -83,7 +83,12 @@ untuk F-06.
 - `AppDataRepository.load` mencoba server terlebih dahulu.
 - Jika server gagal dan cache memiliki data, cache dikembalikan dengan penanda
   `fromCache = true`.
-- Jika cache kosong, error asli dari server tetap diteruskan.
+- Cache memiliki penanda `owner_email` di box `temu_cache_meta`; snapshot hanya
+  dipakai bila email pemiliknya cocok dengan akun aktif.
+- `AppDataRepository.loadCache` menyediakan snapshot awal untuk cold start tanpa
+  menunggu jaringan.
+- Jika cache kosong atau bukan milik akun aktif, error asli dari server tetap
+  diteruskan.
 
 ### 4.4 Otorisasi sinkronisasi laporan
 
@@ -103,13 +108,25 @@ untuk F-06.
 - Error 4xx yang tidak dapat dipulihkan tidak diulang terus.
 - Detail desain dan batasan ada di `docs/LIFECYCLE_UPLOAD_QUEUE.md`.
 
+### 4.6 State recovery
+
+- `AuthGateScreen` memulihkan sesi mahasiswa/admin dari `SharedPreferences`
+  sebelum menentukan halaman awal.
+- `AuthService.clear()` hanya menghapus kunci autentikasi dan timer sesi, bukan
+  seluruh preferensi.
+- `ReportDraftService` menyimpan draft laporan per email di box
+  `temu_report_drafts`, termasuk foto dan jenis laporan.
+- Draft disimpan otomatis saat form berubah, dipulihkan dengan banner, dan
+  dihapus setelah laporan berhasil dikirim atau masuk antrean.
+- `MainNavigationScreen` menampilkan cache awal sebelum sinkronisasi server.
+- Detail alur dan batasan ada di `docs/STATE_RECOVERY.md`.
+
 ## 5. Yang tidak diubah pada patch ini
 
 - Struktur navigasi dan desain UI utama.
 - Skema database.
 - Konfigurasi signing, package ID, dan URL API APK.
-- Mekanisme login/auto-login.
-- State recovery dan candidate matching.
+- Candidate matching hilang/temuan.
 - Endpoint chat, klaim, dan notifikasi yang sudah berjalan.
 
 ## 6. Kriteria penerimaan
@@ -123,24 +140,29 @@ untuk F-06.
    - form laporan yang tidak hilang saat upload gagal permanen;
    - form laporan yang dikosongkan setelah masuk antrean;
    - submit, retry, backoff, filter email, dan pembersihan antrean;
-   - halaman detail yang tetap terbuka saat hapus laporan gagal.
+   - halaman detail yang tetap terbuka saat hapus laporan gagal;
+   - pemulihan sesi mahasiswa/admin dan `clear()` yang terbatas;
+   - draft yang dipulihkan, disimpan otomatis, dan dihapus;
+   - cache milik akun lain tidak dipakai.
 4. `php -l backend/public/api/index.php` lulus.
 5. Uji backend live untuk otorisasi `POST sync` lulus.
 6. Tidak ada perubahan pada file yang belum terkait.
+7. Total test otomatis lulus: 42.
 
 ## 7. Status perubahan dan rollback
 
-Perubahan berada pada branch `feat/foundation-upload-queue` dan belum di-push ke
-GitHub saat dokumen ini diperbarui. Rollback dapat dilakukan dengan
-mengembalikan file yang berubah melalui `git diff`/`git checkout -- <file>` atau
-kembali ke commit `df45066`. Konfigurasi demo pribadi
-`scripts/demo.local.ps1` diabaikan Git; template aman tersedia di
-`scripts/demo.local.example.ps1`.
+Patch fondasi berada pada branch `feat/foundation-upload-queue`, sudah di-push,
+di-review, dan di-merge ke `main` melalui PR #1 (merge commit `d20d77f`).
+Perubahan state recovery berada pada branch `feat/state-recovery`. Rollback
+patch fondasi dapat dilakukan dengan kembali ke commit `df45066`; rollback state
+recovery dilakukan dengan mengembalikan file terkait melalui `git diff` atau
+`git restore`. Konfigurasi demo pribadi `scripts/demo.local.ps1` diabaikan Git;
+template aman tersedia di `scripts/demo.local.example.ps1`.
 
 ## 8. Rencana setelah fondasi
 
 1. ~~Lifecycle-aware upload queue dan retry.~~ Selesai untuk mode foreground.
 2. Pengujian skenario offline/foreground-background pada perangkat/emulator.
-3. State recovery: draft, sesi, dan cold-start cache.
+3. ~~State recovery: draft, sesi, dan cold-start cache.~~ Selesai.
 4. Candidate matching hilang/temuan dengan skor dan evaluasi.
 5. Penyiapan APK uji dan dokumentasi jurnal.

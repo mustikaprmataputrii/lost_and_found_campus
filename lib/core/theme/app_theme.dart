@@ -63,7 +63,7 @@ class LostAndFoundApp extends StatelessWidget {
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(22))),
       ),
-      home: const LoginScreen(),
+      home: const AuthGateScreen(),
     );
   }
 }

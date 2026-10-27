@@ -28,6 +28,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   final List<NotifikasiItem> _notifikasi = [];
   final ReportUploadQueue _uploadQueue = ReportUploadQueue();
   int _pendingUploadCount = 0;
+  bool _menggunakanCache = false;
+  bool _serverLoadSelesai = false;
 
   @override
   void initState() {
@@ -35,7 +37,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     WidgetsBinding.instance.addObserver(this);
     _muatWaktuSesi();
     _mulaiTimer();
+    unawaited(_pulihkanCacheLokal());
     _siapkanDataAwal();
+  }
+
+  Future<void> _pulihkanCacheLokal() async {
+    try {
+      final cached = await AppDataRepository().loadCache(email: widget.email);
+      if (!mounted || cached == null || _serverLoadSelesai) return;
+      setState(() {
+        _daftarBarang
+          ..clear()
+          ..addAll(cached.reports);
+        _daftarSesiChat
+          ..clear()
+          ..addAll(cached.chats);
+        _notifikasi
+          ..clear()
+          ..addAll(cached.notifications);
+        _menggunakanCache = true;
+      });
+    } catch (error) {
+      debugPrint('Gagal menampilkan cache awal: $error');
+    }
   }
 
   Future<void> _siapkanDataAwal() async {
@@ -85,6 +109,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         }
       }
 
+      _serverLoadSelesai = true;
       setState(() {
         _daftarBarang
           ..clear()
@@ -95,6 +120,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         _notifikasi
           ..clear()
           ..addAll(snapshot.notifications);
+        _menggunakanCache = snapshot.fromCache;
       });
 
       if (showPopup && incoming.isNotEmpty && mounted) {
@@ -107,6 +133,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       }
     } catch (_) {
       // Data yang sedang tampil dipertahankan jika server sementara offline.
+      if (mounted && _daftarBarang.isNotEmpty) {
+        setState(() => _menggunakanCache = true);
+      }
     }
   }
 
@@ -536,9 +565,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           onRefresh: () => _sinkronkanDariServer(showPopup: false),
           unreadNotificationCount: _totalUnreadNotifikasi,
           onNotificationsTap: _bukaNotifikasi,
-          pendingUploadCount: _pendingUploadCount),
+          pendingUploadCount: _pendingUploadCount,
+          isUsingCache: _menggunakanCache),
       LaporBarangScreen(
-          onLaporanDibuat: _tambahBarang, defaultNama: widget.nama),
+          onLaporanDibuat: _tambahBarang,
+          defaultNama: widget.nama,
+          email: widget.email),
       DaftarChatScreen(daftarSesi: _daftarSesiChat, onSesiTap: _bukaChat),
       ProfilScreen(
           nama: widget.nama,

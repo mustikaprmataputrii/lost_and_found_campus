@@ -3,8 +3,14 @@ part of '../main.dart';
 class LaporBarangScreen extends StatefulWidget {
   final Future<ReportSubmissionResult> Function(BarangItem) onLaporanDibuat;
   final String defaultNama;
+  final String? email;
+  final ReportDraftService? draftService;
   const LaporBarangScreen(
-      {super.key, required this.onLaporanDibuat, required this.defaultNama});
+      {super.key,
+      required this.onLaporanDibuat,
+      required this.defaultNama,
+      this.email,
+      this.draftService});
   @override
   State<LaporBarangScreen> createState() => _LaporBarangScreenState();
 }
@@ -21,14 +27,138 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
   bool _isPicking = false;
   bool _isSubmitting = false;
   String? _draftId;
+  late final ReportDraftService _draftService;
+  Timer? _draftTimer;
+  bool _draftLoaded = false;
+  bool _restoringDraft = false;
+  bool _draftSelesai = false;
+  bool _draftRestored = false;
+  bool _userInputSebelumDraft = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftService = widget.draftService ?? ReportDraftService();
+    _namaController.addListener(_onDraftChanged);
+    _lokasiController.addListener(_onDraftChanged);
+    _deskripsiController.addListener(_onDraftChanged);
+    _kontakController.addListener(_onDraftChanged);
+    if (widget.email != null) {
+      unawaited(_muatDraft());
+    }
+  }
 
   @override
   void dispose() {
+    _draftTimer?.cancel();
+    if (widget.email != null && _draftLoaded && !_draftSelesai) {
+      unawaited(_simpanDraftSekarang());
+    }
     _namaController.dispose();
     _lokasiController.dispose();
     _deskripsiController.dispose();
     _kontakController.dispose();
     super.dispose();
+  }
+
+  Future<void> _muatDraft() async {
+    final email = widget.email;
+    if (email == null) return;
+    try {
+      final draft = await _draftService.load(email);
+      if (!mounted) return;
+      if (draft == null) {
+        _draftLoaded = true;
+        if (_userInputSebelumDraft) _jadwalkanSimpanDraft();
+        return;
+      }
+      if (_userInputSebelumDraft) {
+        _draftLoaded = true;
+        _jadwalkanSimpanDraft();
+        return;
+      }
+      _restoringDraft = true;
+      _namaController.text = draft.nama;
+      _lokasiController.text = draft.lokasi;
+      _deskripsiController.text = draft.deskripsi;
+      _kontakController.text = draft.kontak;
+      setState(() {
+        _jenis = draft.jenis;
+        _fotoBytes = draft.fotoBytes;
+        _draftRestored = true;
+      });
+      _restoringDraft = false;
+      _draftLoaded = true;
+    } catch (error) {
+      _draftLoaded = true;
+      debugPrint('Gagal memulihkan draft laporan: $error');
+    }
+  }
+
+  void _onDraftChanged() {
+    if (_restoringDraft || _draftSelesai) return;
+    if (!_draftLoaded) {
+      _userInputSebelumDraft = true;
+      return;
+    }
+    _jadwalkanSimpanDraft();
+  }
+
+  void _jadwalkanSimpanDraft() {
+    if (widget.email == null) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 450), () {
+      unawaited(_simpanDraftSekarang());
+    });
+  }
+
+  Future<void> _simpanDraftSekarang() async {
+    final email = widget.email;
+    if (email == null) return;
+    final draft = ReportDraft(
+      email: email,
+      nama: _namaController.text.trim(),
+      lokasi: _lokasiController.text.trim(),
+      deskripsi: _deskripsiController.text.trim(),
+      kontak: _kontakController.text.trim(),
+      jenis: _jenis,
+      fotoBytes: _fotoBytes,
+      updatedAt: DateTime.now(),
+    );
+    try {
+      if (draft.isEmpty) {
+        await _draftService.delete(email);
+      } else {
+        await _draftService.save(draft);
+      }
+    } catch (error) {
+      debugPrint('Gagal menyimpan draft laporan: $error');
+    }
+  }
+
+  Future<void> _hapusDraft() async {
+    final email = widget.email;
+    if (email == null) return;
+    _draftTimer?.cancel();
+    _restoringDraft = true;
+    _draftSelesai = true;
+    _namaController.clear();
+    _lokasiController.clear();
+    _deskripsiController.clear();
+    _kontakController.clear();
+    setState(() {
+      _fotoBytes = null;
+      _jenis = JenisLaporan.ditemukan;
+      _draftRestored = false;
+    });
+    try {
+      await _draftService.delete(email);
+    } catch (error) {
+      debugPrint('Gagal menghapus draft laporan: $error');
+    } finally {
+      _restoringDraft = false;
+      _draftSelesai = false;
+    }
   }
 
   Future<void> _pilihFoto(ImageSource source) async {
@@ -48,7 +178,10 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
           source: source, imageQuality: 85, maxWidth: 1600);
       if (picked != null) {
         final bytes = await picked.readAsBytes();
-        if (mounted) setState(() => _fotoBytes = bytes);
+        if (mounted) {
+          setState(() => _fotoBytes = bytes);
+          _jadwalkanSimpanDraft();
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -133,6 +266,8 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
       final result = await widget.onLaporanDibuat(laporan);
       if (!mounted) return;
 
+      _draftTimer?.cancel();
+      _draftSelesai = true;
       _namaController.clear();
       _lokasiController.clear();
       _deskripsiController.clear();
@@ -141,12 +276,22 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
         _fotoBytes = null;
         _jenis = JenisLaporan.ditemukan;
         _draftId = null;
+        _draftRestored = false;
       });
+      if (widget.email != null) {
+        try {
+          await _draftService.delete(widget.email!);
+        } catch (error) {
+          debugPrint('Gagal menghapus draft setelah laporan terkirim: $error');
+        }
+      }
+      _draftSelesai = false;
       _tampilkanPesan(result.uploaded
           ? 'Laporan berhasil diterbitkan ke warga kampus.'
           : 'Laporan disimpan dan akan dikirim otomatis saat koneksi tersedia.');
     } catch (error) {
       if (!mounted) return;
+      _jadwalkanSimpanDraft();
       final message = error.toString().replaceFirst('Exception: ', '');
       _tampilkanPesan('Laporan gagal dikirim. $message');
     } finally {
@@ -174,6 +319,33 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
               const Text(
                   'Lengkapi detail agar mudah ditemukan warga UIN lainnya.',
                   style: TextStyle(color: UINColors.muted)),
+              if (_draftRestored) ...[
+                const SizedBox(height: 14),
+                Container(
+                    padding: const EdgeInsets.fromLTRB(13, 8, 8, 8),
+                    decoration: BoxDecoration(
+                        color: UINColors.mint,
+                        borderRadius: BorderRadius.circular(15)),
+                    child: Row(children: [
+                      const Icon(Icons.restore_rounded,
+                          color: UINColors.primary, size: 19),
+                      const SizedBox(width: 9),
+                      const Expanded(
+                          child: Text(
+                              'Draft laporan dipulihkan. Periksa kembali sebelum diterbitkan.',
+                              style: TextStyle(
+                                  color: UINColors.deep,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700))),
+                      TextButton(
+                          onPressed: _hapusDraft,
+                          child: const Text('Hapus draft',
+                              style: TextStyle(
+                                  color: UINColors.coral,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800)))
+                    ])),
+              ],
               const SizedBox(height: 20),
               SegmentedButton<JenisLaporan>(
                 segments: const [
@@ -187,8 +359,10 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
                       icon: Icon(Icons.search_rounded)),
                 ],
                 selected: {_jenis},
-                onSelectionChanged: (value) =>
-                    setState(() => _jenis = value.first),
+                onSelectionChanged: (value) {
+                  setState(() => _jenis = value.first);
+                  _jadwalkanSimpanDraft();
+                },
               ),
               const SizedBox(height: 18),
               InkWell(
@@ -214,8 +388,10 @@ class _LaporBarangScreenState extends State<LaporBarangScreen> {
                               child: CircleAvatar(
                                   backgroundColor: Colors.white,
                                   child: IconButton(
-                                      onPressed: () =>
-                                          setState(() => _fotoBytes = null),
+                                      onPressed: () {
+                                        setState(() => _fotoBytes = null);
+                                        _jadwalkanSimpanDraft();
+                                      },
                                       icon: const Icon(Icons.close,
                                           color: UINColors.coral, size: 19)))),
                         ])

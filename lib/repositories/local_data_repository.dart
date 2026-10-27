@@ -27,11 +27,15 @@ class LocalDataRepository {
   static const _chatsBoxName = 'temu_chats';
   static const _notificationsBoxName = 'temu_notifications';
   static const _uploadQueueBoxName = 'temu_upload_queue';
+  static const _draftBoxName = 'temu_report_drafts';
+  static const _metaBoxName = 'temu_cache_meta';
 
   static late Box<Map> _reportsBox;
   static late Box<Map> _chatsBox;
   static late Box<Map> _notificationsBox;
   static late Box<Map> _uploadQueueBox;
+  static late Box<Map> _draftBox;
+  static late Box<String> _metaBox;
   static bool _initialized = false;
 
   static Future<void> initialize() async {
@@ -45,6 +49,8 @@ class LocalDataRepository {
     _chatsBox = await Hive.openBox<Map>(_chatsBoxName);
     _notificationsBox = await Hive.openBox<Map>(_notificationsBoxName);
     _uploadQueueBox = await Hive.openBox<Map>(_uploadQueueBoxName);
+    _draftBox = await Hive.openBox<Map>(_draftBoxName);
+    _metaBox = await Hive.openBox<String>(_metaBoxName);
     _initialized = true;
   }
 
@@ -144,4 +150,40 @@ class LocalDataRepository {
     await initialize();
     await _uploadQueueBox.delete(reportId);
   }
+
+  Future<ReportDraft?> loadReportDraft(String email) async {
+    await initialize();
+    final owner = _normalizeEmail(email);
+    final raw = _draftBox.get(owner);
+    if (raw == null) return null;
+    try {
+      final draft = ReportDraft.fromMap(raw);
+      return _normalizeEmail(draft.email) == owner ? draft : null;
+    } catch (error) {
+      debugPrint('Melewati draft laporan yang rusak: $error');
+      return null;
+    }
+  }
+
+  Future<void> saveReportDraft(ReportDraft draft) async {
+    await initialize();
+    await _draftBox.put(_normalizeEmail(draft.email), draft.toMap());
+  }
+
+  Future<void> deleteReportDraft(String email) async {
+    await initialize();
+    await _draftBox.delete(_normalizeEmail(email));
+  }
+
+  Future<void> markCacheOwner(String email) async {
+    await initialize();
+    await _metaBox.put('owner_email', _normalizeEmail(email));
+  }
+
+  Future<bool> matchesCacheOwner(String email) async {
+    await initialize();
+    return _metaBox.get('owner_email') == _normalizeEmail(email);
+  }
+
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
 }
