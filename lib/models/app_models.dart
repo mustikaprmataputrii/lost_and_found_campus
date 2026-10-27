@@ -164,6 +164,20 @@ class ReportSubmissionResult {
   const ReportSubmissionResult.queued() : uploaded = false;
 }
 
+class ReportMatch {
+  final BarangItem report;
+  final double score;
+  final List<String> reasons;
+
+  const ReportMatch({
+    required this.report,
+    required this.score,
+    this.reasons = const [],
+  });
+
+  int get percent => (score * 100).round();
+}
+
 class ReportDraft {
   final String email;
   final String nama;

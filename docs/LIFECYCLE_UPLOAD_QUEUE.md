@@ -83,7 +83,8 @@ menghantam server. Item berikutnya dicoba pada siklus berikutnya.
 - Belum ada halaman khusus untuk melihat detail isi antrean.
 - State recovery sudah tersedia untuk sesi, draft laporan, dan cold-start cache;
   detailnya ada di `docs/STATE_RECOVERY.md`.
-- Candidate matching belum termasuk dalam tahap ini.
+- Candidate matching tidak termasuk tahap upload queue ini; fitur tersebut
+  diimplementasikan terpisah dan dijelaskan di `docs/CANDIDATE_MATCHING.md`.
 
 ## 7. Verifikasi
 

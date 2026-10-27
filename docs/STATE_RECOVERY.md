@@ -2,7 +2,8 @@
 
 Dokumen ini mencatat implementasi state recovery pada aplikasi TEMU UIN Malang.
 Fokus tahap ini adalah pemulihan sesi login, draft laporan, dan snapshot cache
-saat aplikasi dibuka kembali. Candidate matching belum termasuk dalam tahap ini.
+saat aplikasi dibuka kembali. Candidate matching diimplementasikan pada tahap
+lanjutan dan didokumentasikan di `docs/CANDIDATE_MATCHING.md`.
 
 ## Tujuan
 
@@ -124,7 +125,9 @@ Test otomatis terkait state recovery berada di:
   - cache akun lain tidak dipakai
   - `loadCache` menolak cache milik akun lain
 
-Total test pada tahap ini: **42**, semuanya lulus. `flutter analyze` juga lulus.
+Saat state recovery selesai, total test repository adalah **42**. Setelah
+candidate matching ditambahkan, totalnya menjadi **48** dan semuanya lulus.
+`flutter analyze` juga lulus.
 
 ## Batasan
 
@@ -134,10 +137,9 @@ Total test pada tahap ini: **42**, semuanya lulus. `flutter analyze` juga lulus.
   baru terlihat setelah sinkronisasi berhasil.
 - Jika API dan cache sama-sama tidak tersedia, aplikasi tetap menampilkan error
   agar pengguna tidak menerima status berhasil palsu.
-- Candidate matching barang hilang dan temuan belum diterapkan.
 
 ## Langkah berikutnya
 
-1. Candidate matching hilang/temuan.
-2. Penyimpanan draft ke server atau mekanisme ekspor draft.
+1. Penyimpanan draft ke server atau mekanisme ekspor draft.
+2. Kalibrasi candidate matching dengan dataset laporan nyata.
 3. Build APK final dan pengujian perangkat.

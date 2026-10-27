@@ -44,6 +44,25 @@ class _JelajahScreenState extends State<JelajahScreen> {
     'Kantin Kampus 1'
   ];
 
+  void _bukaDetail(BarangItem item) {
+    final kandidat = CandidateMatchingService().findMatches(
+      target: item,
+      candidates: widget.daftarBarang,
+    );
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailBarangScreen(
+                item: item,
+                currentUserEmail: widget.currentUserEmail,
+                onDelete: widget.onDelete == null
+                    ? null
+                    : () => widget.onDelete!(item),
+                onKlaim: () => widget.onKlaimTap(item),
+                kandidat: kandidat,
+                onKandidatTap: _bukaDetail)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = widget.daftarBarang.where((item) {
@@ -188,18 +207,7 @@ class _JelajahScreenState extends State<JelajahScreen> {
                 ...filtered.map((item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: ItemBarangCard(
-                        item: item,
-                        onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => DetailBarangScreen(
-                                    item: item,
-                                    currentUserEmail: widget.currentUserEmail,
-                                    onDelete: widget.onDelete == null
-                                        ? null
-                                        : () => widget.onDelete!(item),
-                                    onKlaim: () =>
-                                        widget.onKlaimTap(item))))))),
+                        item: item, onTap: () => _bukaDetail(item)))),
               const SizedBox(height: 8),
               Text('Sesi ${widget.appStateStr} • ${widget.detikSesi} detik',
                   textAlign: TextAlign.center,

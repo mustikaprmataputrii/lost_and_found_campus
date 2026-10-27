@@ -25,7 +25,7 @@ Prinsip perubahan:
 | Pemeriksaan | Hasil |
 |---|---|
 | `flutter analyze --no-pub` | Tidak ada issue |
-| `flutter test --no-pub` | 31 test lulus saat audit; 42 test setelah state recovery |
+| `flutter test --no-pub` | 31 test lulus saat audit; 42 setelah state recovery; 48 setelah candidate matching |
 | `php -l backend/public/api/index.php` | Tidak ada syntax error |
 | APK di `Downloads` | ±52 MB, package `com.example.lost_and_found_campus`, label `lost_and_found_campus`, versi 1.0.0 |
 | Isi APK | API mengarah ke dev tunnel HTTPS; release masih memakai debug signing |
@@ -46,7 +46,7 @@ data uji sudah dibersihkan.
 | F-04 | Tinggi | `POST sync` dapat menimpa laporan milik akun lain | `INSERT ... ON DUPLICATE KEY UPDATE` memperbarui kolom laporan berdasarkan `id` tanpa memeriksa `user_email` | Klien yang mengetahui ID laporan dapat mengubah isi laporan akun lain |
 | F-05 | Sedang | Konfigurasi APK belum siap distribusi | package `com.example`, label masih nama package, release memakai debug signing, API memakai dev tunnel | APK hanya cocok untuk demo/internal, belum untuk rilis resmi |
 | F-06 | Sedang | Test belum mencakup fondasi upload/offline | Test yang ada berfokus pada login, form, chat, dan klaim | Regresi pada error handling dan cache tidak terdeteksi |
-| F-07 | Sebagian | Fitur judul jurnal belum lengkap | Lifecycle-aware upload queue dan state recovery sudah ditambahkan; candidate matching belum | Satu fitur judul masih menjadi pekerjaan tahap berikutnya |
+| F-07 | Sebagian | Fitur judul jurnal belum lengkap | Lifecycle-aware upload queue, state recovery, dan candidate matching sudah ditambahkan; evaluasi perangkat/pengguna belum | Implementasi fitur judul sudah ada, validasi lapangan masih menjadi pekerjaan berikutnya |
 | F-08 | Sedang | Error hapus laporan dan tandai notifikasi tidak tertangani | `DetailBarangScreen._konfirmasiHapus` memanggil `onDelete` tanpa `try/catch`; `_bukaNotifikasi` memakai `unawaited` pada API | Berpotensi menjadi unhandled asynchronous error saat server offline |
 
 ## 4. Ruang lingkup patch fondasi
@@ -121,13 +121,28 @@ untuk F-06.
 - `MainNavigationScreen` menampilkan cache awal sebelum sinkronisasi server.
 - Detail alur dan batasan ada di `docs/STATE_RECOVERY.md`.
 
+### 4.7 Candidate matching (tahap lanjutan)
+
+- `CandidateMatchingService` mencocokkan laporan hilang dengan temuan memakai
+  nama, deskripsi, lokasi, dan kedekatan tanggal.
+- Skor akhir: 60% teks, 25% lokasi, dan 15% waktu; ambang minimum `0.42` dan
+  maksimal tiga kandidat.
+- Laporan sejenis, laporan selesai, dan laporan milik akun yang sama dilewati.
+- Bagian **Kandidat cocok** muncul di detail laporan beserta persentase dan
+  alasan; pengguna dapat membuka detail kandidat.
+- Tidak ada perubahan skema database atau endpoint API.
+- Implementasi berada di branch `feat/candidate-matching`; detail rumus dan
+  batasan ada di `docs/CANDIDATE_MATCHING.md`.
+
 ## 5. Yang tidak diubah pada patch ini
 
 - Struktur navigasi dan desain UI utama.
 - Skema database.
 - Konfigurasi signing, package ID, dan URL API APK.
-- Candidate matching hilang/temuan.
 - Endpoint chat, klaim, dan notifikasi yang sudah berjalan.
+
+Candidate matching tidak termasuk patch fondasi awal; fitur tersebut ditambahkan
+pada tahap lanjutan seperti dijelaskan di bagian 4.7.
 
 ## 6. Kriteria penerimaan
 
@@ -147,15 +162,18 @@ untuk F-06.
 4. `php -l backend/public/api/index.php` lulus.
 5. Uji backend live untuk otorisasi `POST sync` lulus.
 6. Tidak ada perubahan pada file yang belum terkait.
-7. Total test otomatis lulus: 42.
+7. Total test otomatis lulus: 48 (42 setelah fondasi/state recovery, ditambah
+   6 test candidate matching).
 
 ## 7. Status perubahan dan rollback
 
 Patch fondasi berada pada branch `feat/foundation-upload-queue`, sudah di-push,
 di-review, dan di-merge ke `main` melalui PR #1 (merge commit `d20d77f`).
-Perubahan state recovery berada pada branch `feat/state-recovery`. Rollback
-patch fondasi dapat dilakukan dengan kembali ke commit `df45066`; rollback state
-recovery dilakukan dengan mengembalikan file terkait melalui `git diff` atau
+Perubahan state recovery berada pada branch `feat/state-recovery` dan sudah
+di-merge melalui PR #2 (merge commit `22eef6e`). Candidate matching berada pada
+branch `feat/candidate-matching`. Rollback patch fondasi dapat dilakukan dengan
+kembali ke commit `df45066`; rollback state recovery atau candidate matching
+dilakukan dengan mengembalikan file terkait melalui `git diff` atau
 `git restore`. Konfigurasi demo pribadi `scripts/demo.local.ps1` diabaikan Git;
 template aman tersedia di `scripts/demo.local.example.ps1`.
 
@@ -164,5 +182,6 @@ template aman tersedia di `scripts/demo.local.example.ps1`.
 1. ~~Lifecycle-aware upload queue dan retry.~~ Selesai untuk mode foreground.
 2. Pengujian skenario offline/foreground-background pada perangkat/emulator.
 3. ~~State recovery: draft, sesi, dan cold-start cache.~~ Selesai.
-4. Candidate matching hilang/temuan dengan skor dan evaluasi.
-5. Penyiapan APK uji dan dokumentasi jurnal.
+4. ~~Candidate matching hilang/temuan dengan skor.~~ Selesai; evaluasi dataset
+   dan kalibrasi ambang masih terbuka.
+5. Penyiapan APK uji, pengujian perangkat, dan dokumentasi jurnal.
