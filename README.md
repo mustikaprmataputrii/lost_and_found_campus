@@ -252,18 +252,24 @@ Isi variabel berikut sesuai komputer demo:
 - `TEMU_PUBLIC_API_URL`: URL API publik yang dipakai APK.
 - `TEMU_PHP_EXE`: path `php.exe` bila tidak tersedia di `PATH`.
 - `TEMU_DEVTUNNEL_EXE`: path `devtunnel.exe` bila tidak tersedia di `PATH`.
-- `TEMU_MYSQL_SERVICE`: nama service MySQL, default `MySQL80`.
-- `TEMU_DB_PORT`: port MySQL, default `3306`.
+- `TEMU_DB_PORT`: port MySQL, default `3306`. Setup Laragon memakai `3307`.
+- `TEMU_MYSQL_EXE` dan `TEMU_MYSQL_INI`: opsional, path `mysqld.exe` dan
+  `my.ini` Laragon. Jika kosong, script mencari otomatis di
+  `D:\laragon\bin\mysql\mysql-*\`.
+- `TEMU_MYSQL_SERVICE`: nama service MySQL Windows, dipakai hanya bila
+  `mysqld` Laragon tidak ditemukan.
 - `TEMU_API_PORT`: port API lokal, default `8088`.
 
 Setelah konfigurasi siap, jalankan `MULAI_SERVER_TEMU.bat` sebagai Administrator.
 Script akan:
 
-- menyalakan service MySQL jika service tersedia dan belum berjalan;
-- memeriksa koneksi database pada port yang dikonfigurasi;
+- menyalakan MySQL Laragon pada port yang dikonfigurasi bila port belum
+  terbuka, atau memakai service Windows bila `mysqld` Laragon tidak ada;
+- memeriksa koneksi database pada port tersebut;
 - memperpanjang tunnel dan membuka akses anonim sementara;
 - menjalankan API PHP dan memeriksa endpoint health;
-- menutup tunnel, API, dan MySQL yang disalakan script saat `Ctrl+C`.
+- menutup tunnel, API, dan MySQL yang dinyalakan script saat `Ctrl+C`.
+  MySQL yang sudah berjalan sebelum script dijalankan tidak akan dihentikan.
 
 APK uji harus dibangun dengan URL yang sama:
 
