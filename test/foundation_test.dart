@@ -220,5 +220,97 @@ void main() {
 
       expect(local.saveReportCalled, isFalse);
     });
+
+    test('load tanpa cache melempar error saat API gagal', () async {
+      final local = _FakeLocal(
+        cached: LocalDataSnapshot(
+          reports: [_barangUji()],
+          chats: const [],
+          notifications: const [],
+        ),
+      );
+      final remote = _FakeRemote(loadError: Exception('API offline'));
+      final repository = AppDataRepository(local: local, remote: remote);
+
+      await expectLater(
+        repository.load(
+          email: 'owner@student.uin-malang.ac.id',
+          izinkanCache: false,
+        ),
+        throwsA(
+          predicate(
+            (Object error) => error.toString().contains('API offline'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('Ringkasan dashboard', () {
+    test('menghitung temuan aktif dan pesan belum dibaca', () {
+      final snapshot = LocalDataSnapshot(
+        reports: [
+          _barangUji(),
+          BarangItem(
+            id: 'found-active',
+            nama: 'Dompet ditemukan',
+            lokasi: 'Gedung A',
+            deskripsi: 'Dompet hitam.',
+            jenis: JenisLaporan.ditemukan,
+            pelapor: 'Mahasiswa Uji',
+            kontak: '081234567890',
+            tanggal: DateTime(2026, 10, 26),
+          ),
+          BarangItem(
+            id: 'found-done',
+            nama: 'Kunci selesai',
+            lokasi: 'Gedung B',
+            deskripsi: 'Sudah diklaim.',
+            jenis: JenisLaporan.ditemukan,
+            pelapor: 'Mahasiswa Uji',
+            kontak: '081234567890',
+            tanggal: DateTime(2026, 10, 26),
+            status: StatusBarang.selesai,
+          ),
+        ],
+        chats: [
+          SesiChat(
+            id: 'chat-uji',
+            barang: _barangUji(),
+            pesanList: const [],
+            unreadCount: 2,
+          ),
+        ],
+        notifications: [
+          NotifikasiItem(
+            title: 'Klaim baru',
+            message: 'Ada yang mengajukan klaim.',
+            waktu: DateTime(2026, 10, 27),
+          ),
+        ],
+      );
+
+      final ringkasan = RingkasanDashboard.dariSnapshot(snapshot);
+
+      expect(ringkasan.temuanAktif, 1);
+      expect(ringkasan.pesanBaru, 2);
+      expect(ringkasan.judulPesan, 'Klaim baru');
+      expect(ringkasan.isiPesan, 'Ada yang mengajukan klaim.');
+      expect(ringkasan.dariCache, isFalse);
+    });
+
+    test('menampilkan pesan kosong saat tidak ada notifikasi', () {
+      final ringkasan = RingkasanDashboard.dariSnapshot(
+        const LocalDataSnapshot(
+          reports: [],
+          chats: [],
+          notifications: [],
+        ),
+      );
+
+      expect(ringkasan.temuanAktif, 0);
+      expect(ringkasan.pesanBaru, 0);
+      expect(ringkasan.judulPesan, 'Tidak ada pesan baru');
+    });
   });
 }

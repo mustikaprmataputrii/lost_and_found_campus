@@ -378,14 +378,44 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<SesiChat?> _kirimPesanKeServer(String chatId, String text) async {
     await AppDataRepository()
         .sendMessage(email: widget.email, chatId: chatId, text: text);
-    return _muatSesiTerbaru(chatId, markRead: false);
+    try {
+      return await _muatSesiTerbaru(chatId,
+          markRead: false, butuhDataServer: true);
+    } catch (_) {
+      // Pesan sudah tersimpan di server; room akan menampilkan bubble lokal
+      // dan sinkronisasi berkala menyusul.
+      return null;
+    }
   }
 
   Future<SesiChat?> _hapusPesanDariServer(
       String chatId, String messageId) async {
     await AppDataRepository()
         .deleteMessage(email: widget.email, messageId: messageId);
-    return _muatSesiTerbaru(chatId, markRead: false);
+    try {
+      return await _muatSesiTerbaru(chatId,
+          markRead: false, butuhDataServer: true);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Menyamakan status klaim di data lokal supaya banner chat langsung
+  /// berubah walau permintaan sinkronisasi berikutnya belum selesai.
+  void _perbaruiStatusKlaimLokal(String reportId, StatusBarang status,
+      {String? claimantEmail}) {
+    for (final item in _daftarBarang) {
+      if (item.id == reportId) {
+        item.status = status;
+        item.claimantEmail = claimantEmail;
+      }
+    }
+    for (final sesi in _daftarSesiChat) {
+      if (sesi.barang.id == reportId) {
+        sesi.barang.status = status;
+        sesi.barang.claimantEmail = claimantEmail;
+      }
+    }
   }
 
   Future<SesiChat?> _ajukanKlaimDariChat(String chatId) async {
@@ -394,7 +424,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       email: widget.email,
       reportId: sesi.barang.id,
     );
-    return _muatSesiTerbaru(chatId, markRead: false);
+    setState(() => _perbaruiStatusKlaimLokal(
+          sesi.barang.id,
+          StatusBarang.prosesKlaim,
+          claimantEmail: widget.email,
+        ));
+    try {
+      return await _muatSesiTerbaru(chatId,
+              markRead: false, butuhDataServer: true) ??
+          sesi;
+    } catch (_) {
+      return sesi;
+    }
   }
 
   Future<SesiChat?> _tanggapiKlaimDariChat(String chatId, bool approve) async {
@@ -404,7 +445,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       reportId: sesi.barang.id,
       approve: approve,
     );
-    return _muatSesiTerbaru(chatId, markRead: false);
+    setState(() => _perbaruiStatusKlaimLokal(
+          sesi.barang.id,
+          approve ? StatusBarang.selesai : StatusBarang.belumDiklaim,
+          claimantEmail: approve ? sesi.barang.claimantEmail : null,
+        ));
+    try {
+      return await _muatSesiTerbaru(chatId,
+              markRead: false, butuhDataServer: true) ??
+          sesi;
+    } catch (_) {
+      return sesi;
+    }
   }
 
   Future<void> _tandaiChatDibaca(String chatId) async {
@@ -426,9 +478,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   Future<SesiChat?> _muatSesiTerbaru(String chatId,
-      {bool markRead = true}) async {
+      {bool markRead = true, bool butuhDataServer = false}) async {
     if (markRead) await _tandaiChatDibaca(chatId);
-    final snapshot = await AppDataRepository().load(email: widget.email);
+    final snapshot = await AppDataRepository()
+        .load(email: widget.email, izinkanCache: !butuhDataServer);
     if (!mounted) return null;
     setState(() {
       _daftarBarang

@@ -8,7 +8,16 @@ class AppDataRepository {
       : _local = local ?? LocalDataRepository(),
         _remote = remote ?? ApiService();
 
-  Future<LocalDataSnapshot> load({required String email}) async {
+  /// Memuat data terbaru dari server.
+  ///
+  /// Bila [izinkanCache] bernilai false, kegagalan jaringan akan dilempar ke
+  /// pemanggil alih-alih diganti data cache. Ini dipakai setelah aksi pengguna
+  /// (kirim pesan, ajukan/tanggapi klaim) supaya layar tidak menampilkan data
+  /// lama seolah-olah aksi tadi tidak tersimpan.
+  Future<LocalDataSnapshot> load({
+    required String email,
+    bool izinkanCache = true,
+  }) async {
     final owner = _normalizeEmail(email);
     try {
       final remoteData = await _remote.load(email: owner);
@@ -25,6 +34,9 @@ class AppDataRepository {
       }
       return remoteData;
     } catch (error, stackTrace) {
+      if (!izinkanCache) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       try {
         if (await _local.matchesCacheOwner(owner)) {
           final cached = await _local.load(seedIfEmpty: false);
