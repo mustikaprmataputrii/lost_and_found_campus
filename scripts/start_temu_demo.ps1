@@ -10,6 +10,8 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $publicRoot = Join-Path $projectRoot 'backend\public'
 $mysqlServiceName = if ($env:TEMU_MYSQL_SERVICE) { $env:TEMU_MYSQL_SERVICE } else { 'MySQL80' }
 $dbPort = if ($env:TEMU_DB_PORT) { [int]$env:TEMU_DB_PORT } else { 3306 }
+$mysqlExe = $env:TEMU_MYSQL_EXE
+$mysqlIni = $env:TEMU_MYSQL_INI
 $apiPort = if ($env:TEMU_API_PORT) { [int]$env:TEMU_API_PORT } else { 8088 }
 $healthUrl = "http://127.0.0.1:$apiPort/api/index.php?path=health"
 $tunnelId = $env:TEMU_TUNNEL_ID
@@ -41,6 +43,28 @@ if (-not $devTunnelExe) {
 if (-not $devTunnelExe -and (Test-Path -LiteralPath 'D:\laragon\bin\devtunnel.exe')) {
     $devTunnelExe = 'D:\laragon\bin\devtunnel.exe'
 }
+
+if (-not $mysqlExe) {
+    $laragonMysqld = Get-ChildItem 'D:\laragon\bin\mysql\mysql-*\bin\mysqld.exe' -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending |
+        Select-Object -First 1
+    if ($laragonMysqld) {
+        $mysqlExe = $laragonMysqld.FullName
+    }
+}
+if (-not $mysqlExe) {
+    $mysqldCommand = Get-Command mysqld -ErrorAction SilentlyContinue
+    if ($mysqldCommand) {
+        $mysqlExe = $mysqldCommand.Source
+    }
+}
+if ($mysqlExe -and -not $mysqlIni) {
+    $candidateIni = Join-Path (Split-Path -Parent (Split-Path -Parent $mysqlExe)) 'my.ini'
+    if (Test-Path -LiteralPath $candidateIni) {
+        $mysqlIni = $candidateIni
+    }
+}
+$mysqlAdminExe = if ($mysqlExe) { Join-Path (Split-Path -Parent $mysqlExe) 'mysqladmin.exe' } else { $null }
 
 function Test-TcpPort {
     param([int]$Port)
@@ -87,21 +111,53 @@ if (Test-TcpPort -Port $apiPort) {
 }
 
 $mysqlStartedByScript = $false
+$mysqlProcess = $null
 $phpProcess = $null
 $anonymousAccessOpened = $false
 $stdoutLog = Join-Path $env:TEMP 'temu-api.stdout.log'
 $stderrLog = Join-Path $env:TEMP 'temu-api.stderr.log'
+$mysqlStdoutLog = Join-Path $env:TEMP 'temu-mysql.stdout.log'
+$mysqlStderrLog = Join-Path $env:TEMP 'temu-mysql.stderr.log'
+
+function Stop-TemuMysql {
+    param([System.Diagnostics.Process]$Process)
+
+    if ($null -eq $Process -or $Process.HasExited) {
+        return
+    }
+    if ($mysqlAdminExe -and (Test-Path -LiteralPath $mysqlAdminExe)) {
+        & $mysqlAdminExe --host=127.0.0.1 "--port=$dbPort" --user=root shutdown 2>$null | Out-Null
+    }
+    if (-not $Process.WaitForExit(15000)) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    }
+}
 
 try {
     if (-not (Test-TcpPort -Port $dbPort)) {
-        $mysqlService = Get-Service -Name $mysqlServiceName -ErrorAction SilentlyContinue
-        if ($null -eq $mysqlService) {
-            throw "MySQL belum berjalan pada port $dbPort dan service '$mysqlServiceName' tidak ditemukan. Jalankan MySQL Laragon atau atur TEMU_MYSQL_SERVICE/TEMU_DB_PORT."
-        }
-        if ($mysqlService.Status -ne 'Running') {
-            Start-Service -Name $mysqlServiceName
+        $startedLaragonMysql = $false
+        if ($mysqlExe -and $mysqlIni -and (Test-Path -LiteralPath $mysqlExe) -and (Test-Path -LiteralPath $mysqlIni)) {
+            Write-Host "Menyalakan MySQL Laragon pada port $dbPort..."
+            $mysqlProcess = Start-Process -FilePath $mysqlExe `
+                -ArgumentList @("--defaults-file=$mysqlIni", "--port=$dbPort", '--mysqlx=0') `
+                -WorkingDirectory (Split-Path -Parent $mysqlExe) `
+                -WindowStyle Hidden `
+                -PassThru `
+                -RedirectStandardOutput $mysqlStdoutLog `
+                -RedirectStandardError $mysqlStderrLog
+            $startedLaragonMysql = $true
             $mysqlStartedByScript = $true
-            (Get-Service -Name $mysqlServiceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(45))
+        }
+        if (-not $startedLaragonMysql) {
+            $mysqlService = Get-Service -Name $mysqlServiceName -ErrorAction SilentlyContinue
+            if ($null -eq $mysqlService) {
+                throw "MySQL belum berjalan pada port $dbPort dan tidak ada mysqld Laragon maupun service '$mysqlServiceName'. Atur TEMU_MYSQL_EXE/TEMU_MYSQL_INI atau TEMU_MYSQL_SERVICE."
+            }
+            if ($mysqlService.Status -ne 'Running') {
+                Start-Service -Name $mysqlServiceName
+                $mysqlStartedByScript = $true
+                (Get-Service -Name $mysqlServiceName).WaitForStatus('Running', [TimeSpan]::FromSeconds(45))
+            }
         }
     }
 
@@ -114,7 +170,10 @@ try {
         Start-Sleep -Seconds 1
     }
     if (-not $mysqlReady) {
-        throw "MySQL tidak siap pada port $dbPort."
+        if (Test-Path -LiteralPath $mysqlStderrLog) {
+            Get-Content -LiteralPath $mysqlStderrLog -Tail 20 | Out-Host
+        }
+        throw "MySQL tidak siap pada port $dbPort. Periksa log: $mysqlStderrLog"
     }
 
     & $devTunnelExe update $tunnelId --expiration 30d | Out-Host
@@ -142,7 +201,7 @@ try {
         -RedirectStandardError $stderrLog
 
     $apiReady = $false
-    for ($attempt = 0; $attempt -lt 25; $attempt++) {
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
         try {
             $health = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 3
             if ($health.ok -and $health.database -eq 'connected') {
@@ -150,8 +209,8 @@ try {
                 break
             }
         } catch {
-            Start-Sleep -Seconds 1
         }
+        Start-Sleep -Seconds 1
     }
     if (-not $apiReady) {
         if (Test-Path -LiteralPath $stderrLog) {
@@ -183,7 +242,9 @@ try {
     if ($null -ne $phpProcess -and -not $phpProcess.HasExited) {
         Stop-Process -Id $phpProcess.Id -Force -ErrorAction SilentlyContinue
     }
-    if ($mysqlStartedByScript) {
+    if ($null -ne $mysqlProcess) {
+        Stop-TemuMysql -Process $mysqlProcess
+    } elseif ($mysqlStartedByScript) {
         Stop-Service -Name $mysqlServiceName -ErrorAction SilentlyContinue
     }
     Write-Host 'Sesi demo selesai. Akses publik dan API sudah ditutup.'
