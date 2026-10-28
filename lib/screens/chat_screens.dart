@@ -162,7 +162,20 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
       try {
         final refreshed = await widget.onSendMessage!(text);
         if (!mounted) return;
-        if (refreshed != null) setState(() => _sesi = refreshed);
+        setState(() {
+          if (refreshed != null) {
+            _sesi = refreshed;
+          } else {
+            // Pesan sudah tersimpan di server tetapi sinkronisasi ulang gagal;
+            // tetap tampilkan bubble supaya pengirim mendapat umpan balik.
+            _sesi.pesanList.add(PesanChat(
+                pengirim: widget.currentUserName,
+                pengirimEmail: widget.currentUserEmail,
+                teks: text,
+                waktu: DateTime.now(),
+                isMe: true));
+          }
+        });
         _inputController.clear();
         _scrollToLatest();
       } catch (error) {
@@ -261,7 +274,10 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     setState(() => _claimBusy = true);
     try {
       final refreshed = await callback();
-      if (mounted && refreshed != null) setState(() => _sesi = refreshed);
+      if (!mounted) return;
+      setState(() {
+        if (refreshed != null) _sesi = refreshed;
+      });
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -287,7 +303,10 @@ class _RoomChatScreenState extends State<RoomChatScreen> {
     setState(() => _claimBusy = true);
     try {
       final refreshed = await callback(approve: approve);
-      if (mounted && refreshed != null) setState(() => _sesi = refreshed);
+      if (!mounted) return;
+      setState(() {
+        if (refreshed != null) _sesi = refreshed;
+      });
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
