@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 $config = require __DIR__ . '/../../config.php';
 
+// Semua kolom waktu memakai zona waktu lokal server (NOW) supaya konsisten
+// dengan data lama dan jam yang ditampilkan aplikasi Android.
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: ' . $config['cors_origin']);
 header('Access-Control-Allow-Headers: Content-Type, Accept, X-Admin-Token');
@@ -132,7 +135,7 @@ function setPresence(mysqli $db, string $email, bool $isOnline): void
 {
     $statement = $db->prepare(
         'INSERT INTO user_presence (email, is_online, last_seen)
-         VALUES (?, ?, UTC_TIMESTAMP())
+         VALUES (?, ?, NOW())
          ON DUPLICATE KEY UPDATE is_online = VALUES(is_online), last_seen = VALUES(last_seen)',
     );
     $online = $isOnline ? 1 : 0;
@@ -245,7 +248,7 @@ if ($method === 'POST' && $path === 'chats/start') {
 
         $memberStatement = $db->prepare(
             'INSERT IGNORE INTO chat_members (chat_id, email, last_read_at)
-             VALUES (?, ?, UTC_TIMESTAMP(6))',
+             VALUES (?, ?, NOW(6))',
         );
         $memberStatement->bind_param('ss', $chatId, $ownerEmail);
         $memberStatement->execute();
@@ -328,7 +331,7 @@ if ($method === 'POST' && $path === 'claims/request') {
         $notification = $db->prepare(
             'INSERT INTO notifications
               (notification_key, email, chat_id, title, message, waktu, is_read)
-             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)
+             VALUES (?, ?, ?, ?, ?, NOW(6), 0)
              ON DUPLICATE KEY UPDATE waktu = VALUES(waktu), is_read = 0',
         );
         $title = 'Permintaan klaim';
@@ -410,7 +413,7 @@ if ($method === 'POST' && $path === 'claims/respond') {
         $notification = $db->prepare(
             'INSERT INTO notifications
               (notification_key, email, chat_id, title, message, waktu, is_read)
-             VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)
+             VALUES (?, ?, ?, ?, ?, NOW(6), 0)
              ON DUPLICATE KEY UPDATE waktu = VALUES(waktu), is_read = 0',
         );
         $title = $approve ? 'Klaim disetujui' : 'Klaim ditolak';
@@ -466,7 +469,7 @@ if ($method === 'POST' && $path === 'messages/send') {
         $senderName = (string) $user['nama'];
         $insertMessage = $db->prepare(
             'INSERT INTO messages (chat_id, pengirim, pengirim_email, teks, waktu, is_me)
-             VALUES (?, ?, ?, ?, UTC_TIMESTAMP(6), 1)',
+             VALUES (?, ?, ?, ?, NOW(6), 1)',
         );
         $insertMessage->bind_param('ssss', $chatId, $senderName, $email, $text);
         $insertMessage->execute();
@@ -487,7 +490,7 @@ if ($method === 'POST' && $path === 'messages/send') {
         $notification = $db->prepare(
             'INSERT INTO notifications
               (notification_key, email, chat_id, message_id, title, message, waktu, is_read)
-             VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6), 0)',
+             VALUES (?, ?, ?, ?, ?, ?, NOW(6), 0)',
         );
         $title = 'Pesan baru';
         $noticeText = $senderName . ': ' . $text;
@@ -533,7 +536,7 @@ if ($method === 'POST' && $path === 'chats/read') {
         respond(['ok' => false, 'error' => 'Anda bukan anggota percakapan ini.'], 403);
     }
     $readStatement = $db->prepare(
-        'UPDATE chat_members SET last_read_at = UTC_TIMESTAMP(6) WHERE chat_id = ? AND email = ?',
+        'UPDATE chat_members SET last_read_at = NOW(6) WHERE chat_id = ? AND email = ?',
     );
     $readStatement->bind_param('ss', $chatId, $email);
     $readStatement->execute();
@@ -757,7 +760,7 @@ if ($method === 'GET') {
     if ($isAdminRequest) {
         $userResult = $db->query(
             'SELECT u.nim, u.email, u.nama, u.created_at,
-                    CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                    CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(NOW(), INTERVAL 20 SECOND)
                          THEN 1 ELSE 0 END AS is_online,
                     p.last_seen
              FROM users u
@@ -780,7 +783,7 @@ if ($method === 'GET') {
     $adminEmail = strtolower($config['admin']['email']);
     $chatQuery = $isAdminRequest
         ? 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
-                  CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                  CASE WHEN p.is_online = 1 AND p.last_seen >= DATE_SUB(NOW(), INTERVAL 20 SECOND)
                        THEN 1 ELSE 0 END AS peer_online,
                   p.last_seen AS peer_last_seen,
                   (SELECT COUNT(*) FROM messages unread_message
@@ -802,7 +805,7 @@ if ($method === 'GET') {
            LEFT JOIN users owner_user ON owner_user.email = c.owner_email
            ORDER BY c.updated_at DESC'
         : 'SELECT c.id AS chat_id, c.is_online, c.last_seen, c.unread_count,
-                  CASE WHEN peer_presence.is_online = 1 AND peer_presence.last_seen >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)
+                  CASE WHEN peer_presence.is_online = 1 AND peer_presence.last_seen >= DATE_SUB(NOW(), INTERVAL 20 SECOND)
                        THEN 1 ELSE 0 END AS peer_online,
                   peer_presence.last_seen AS peer_last_seen,
                   (SELECT COUNT(*) FROM messages unread_message
